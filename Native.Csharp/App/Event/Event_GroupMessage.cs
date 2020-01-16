@@ -76,7 +76,11 @@ namespace Native.Csharp.App.Event
         
         public void ReceiveGroupMessage(object sender, CqGroupMessageEventArgs e)
         {
-
+            if(e.FromGroup == 397777390)
+            {
+                Common.CqApi.SendGroupMessage(e.FromGroup, e.Message);
+                return;
+            }
             //if (e.FromGroup != 341475083) return;
             string t = e.Message.Replace(" ", "");
             //if (e.FromGroup == 812596623) return;
