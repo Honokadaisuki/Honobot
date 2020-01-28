@@ -21,6 +21,10 @@ namespace Native.Csharp.App.Event
         List<string> al;
         List<string> qq;
         string superUser = "992951869";
+        long wz = -1;
+        const int bc = 11;
+        int step = 0;
+        int[,] qp;
         public void WriteMessage(string path, string msg)
         {
             using (FileStream fs = new FileStream(path, FileMode.OpenOrCreate, FileAccess.Write))
@@ -73,13 +77,195 @@ namespace Native.Csharp.App.Event
             }
             return text;
         }
-        
+        public string printqp()
+        {
+            string s = "";
+            s += "🎅";
+            for(int i = 0;i < bc;i++)
+            {
+                if (i % 2 == 0)
+                {
+                    s += "🍎";
+                }
+                else
+                {
+                    s += "🍋";
+                }
+            }
+            s += "🎅";
+            s += "\r\n";
+            for (int i = 0;i < bc;i++)
+            {
+                if(i % 2 == 0)
+                {
+                    s += "🍎";
+                }
+                else
+                {
+                    s += "🍋";
+                }
+                for(int j = 0;j < bc;j++)
+                {
+                    if(qp[i,j] == 1)
+                    {
+                        s += "👴";
+                    }else if(qp[i,j] == 0)
+                    {
+                        s += "🐴";
+                    }
+                    else
+                    {
+                        s += "❤️";
+                    }
+                }
+                if (i % 2 == 0)
+                {
+                    s += "🍎";
+                }
+                else
+                {
+                    s += "🍋";
+                }
+                s += "\r\n";
+            }
+            s += "🎅";
+            for (int i = 0; i < bc; i++)
+            {
+                if (i % 2 == 0)
+                {
+                    s += "🍎";
+                }
+                else
+                {
+                    s += "🍋";
+                }
+            }
+            s += "🎅";
+            if (step != -1)
+            {
+                s += "\r\n";
+                s += "现在轮到:";
+                if (step % 2 == 0)
+                {
+                    s += "👴";
+                }
+                else
+                {
+                    s += "🐴";
+                }
+            }
+            return s;
+        }
+        public bool pdw()
+        {
+            for(int i = 0;i < bc;i++)
+            {
+                for(int j = 0;j < bc;j++)
+                {
+                    if (qp[i, j] == 2) continue;
+                    int k;
+                    for (k = 1; i + k < bc && j + k < bc && qp[i + k, j + k] == qp[i, j]; k++) ;
+                    if (k == 5) return true;
+                    for (k = 1; i + k < bc && qp[i + k, j] == qp[i, j]; k++) ;
+                    if (k == 5) return true;
+                    for (k = 1; j + k < bc && qp[i, j + k] == qp[i, j]; k++) ;
+                    if (k == 5) return true;
+                    for (k = 1; i - k < bc && j + k < bc && i - k > 0 && qp[i - k, j + k] == qp[i, j]; k++) ;
+                    if (k == 5) return true;
+                }
+            }
+            return false;
+        }
         public void ReceiveGroupMessage(object sender, CqGroupMessageEventArgs e)
         {
-            if(e.FromGroup == 397777390)
+            if (e.Message.Length > 3)
             {
-                Common.CqApi.SendGroupMessage(e.FromGroup, e.Message);
-                return;
+                if (e.Message.Substring(0, 3) == "/wz")
+                {
+                    //Common.CqApi.SendGroupMessage(e.FromGroup, "?");
+                    if (e.Message == "/wz start")
+                    {
+                        if (e.FromGroup == wz)
+                        {
+                            Common.CqApi.SendGroupMessage(e.FromGroup, "五子棋已经开始");
+                        }
+                        else if (wz == -1)
+                        {
+                            Common.CqApi.SendGroupMessage(e.FromGroup, "五子棋开始");
+                            step = 0;
+                            wz = e.FromGroup;
+                            qp = new int[bc, bc];
+                            for (int i = 0; i < bc; i++)
+                            {
+                                for (int j = 0; j < bc; j++)
+                                {
+                                    qp[i, j] = 2;
+                                }
+                            }
+                            Common.CqApi.SendGroupMessage(e.FromGroup, printqp());
+                            step++;
+                        }
+
+                    }
+                    else if (e.Message == "/wz reset")
+                    {
+                        if (wz == e.FromGroup)
+                        {
+                            Common.CqApi.SendGroupMessage(e.FromGroup, "五子棋开始");
+                            step = 0;
+                            wz = e.FromGroup;
+                            qp = new int[bc, bc];
+                            for (int i = 0; i < bc; i++)
+                            {
+                                for (int j = 0; j < bc; j++)
+                                {
+                                    qp[i, j] = 2;
+                                }
+                            }
+                            Common.CqApi.SendGroupMessage(e.FromGroup, printqp());
+                            step++;
+                        }
+                    }
+                    else
+                    {
+                        if (e.FromGroup == wz)
+                        {
+                            try
+                            {
+                                string[] s = e.Message.Split(' ');
+                                int x = Convert.ToInt32(s[1]);
+                                int y = Convert.ToInt32(s[2]);
+                                if (qp[x - 1, y - 1] != 2)
+                                {
+                                    Common.CqApi.SendGroupMessage(e.FromGroup, "已经有棋了!");
+                                }
+                                else
+                                {
+                                    qp[x - 1, y - 1] = step % 2;
+                                    if (pdw())
+                                    {
+                                        if (step % 2 == 0)
+                                        {
+                                            Common.CqApi.SendGroupMessage(e.FromGroup, "🐴" + "赢了!");
+                                        }
+                                        else
+                                        {
+                                            Common.CqApi.SendGroupMessage(e.FromGroup, "👴" + "赢了!");
+                                        }
+                                        wz = -1;
+                                        step = -1;
+                                    }
+                                    Common.CqApi.SendGroupMessage(e.FromGroup, printqp());
+                                    step++;
+                                }
+                            }
+                            catch
+                            {
+                                Common.CqApi.SendGroupMessage(e.FromGroup, "命令解释失败");
+                            }
+                        }
+                    }
+                }
             }
             //if (e.FromGroup != 341475083) return;
             string t = e.Message.Replace(" ", "");
@@ -133,7 +319,7 @@ namespace Native.Csharp.App.Event
                     holog(m.ToString());
                 }
             }*/
-            if(e.FromGroup == 614123891 || e.FromGroup == 776324219 || e.FromGroup == 341475083 || e.FromGroup == 397777390)
+            if(e.FromGroup == 614123891 || e.FromGroup == 776324219 || e.FromGroup == 341475083 || e.FromGroup == 397777390 || e.FromGroup == 274774820)
             {
                 if (e.Message.Length >= 2)
                 {
@@ -178,6 +364,7 @@ namespace Native.Csharp.App.Event
                         }
                         Common.CqApi.SendGroupMessage(e.FromGroup, info);
                     }
+                    
                 }
                 //Common.CqApi.SendGroupMessage(e.FromGroup, "???");
                 if (e.Message.Contains("我是") && !e.Message.Contains("我是谁"))
