@@ -17,7 +17,7 @@ namespace Native.Csharp.App.Event
     {
         ArrayList ge,re;
         bool ok = false;
-        Dictionary<long, string[]> la;
+        Dictionary<long, List<string> > la;
         List<string> al;
         List<string> qq;
         string superUser = "992951869";
@@ -55,13 +55,13 @@ namespace Native.Csharp.App.Event
             ReadData();
             al = new List<string>();
             qq = new List<string>();
-            la = new Dictionary<long, string[]>();
+            la = new Dictionary<long, List<string> >();
             al.Add("谷梦龙");
             qq.Add(superUser);
         }
         void holog(string s)
         {
-            WriteMessage("log.txt", s + "\r\n");
+            WriteMessage("log.txt", s + "\n");
         }
         private string Gettxt(string imagePath)
         {
@@ -93,7 +93,7 @@ namespace Native.Csharp.App.Event
                 }
             }
             s += "🎅";
-            s += "\r\n";
+            s += "\n";
             for (int i = 0;i < bc;i++)
             {
                 if(i % 2 == 0)
@@ -126,7 +126,7 @@ namespace Native.Csharp.App.Event
                 {
                     s += "🍋";
                 }
-                s += "\r\n";
+                s += "\n";
             }
             s += "🎅";
             for (int i = 0; i < bc; i++)
@@ -143,7 +143,7 @@ namespace Native.Csharp.App.Event
             s += "🎅";
             if (step != -1)
             {
-                s += "\r\n";
+                s += "\n";
                 s += "现在轮到:";
                 if (step % 2 == 0)
                 {
@@ -178,6 +178,12 @@ namespace Native.Csharp.App.Event
         }
         public void ReceiveGroupMessage(object sender, CqGroupMessageEventArgs e)
         {
+            if (!ok)
+            {
+                ok = true;
+                init();
+            }
+            //五子棋
             if (e.Message.Length > 3)
             {
                 if (e.Message.Substring(0, 3) == "/wz")
@@ -267,40 +273,45 @@ namespace Native.Csharp.App.Event
                     }
                 }
             }
-            //if (e.FromGroup != 341475083) return;
+
+            //复读
             string t = e.Message.Replace(" ", "");
-            //if (e.FromGroup == 812596623) return;
-            if (!ok)
+            if(!la.ContainsKey(e.FromGroup))
             {
-                ok = true;
-                init();
+                la[e.FromGroup] = new List<string>();
             }
-            if(la.ContainsKey(e.FromGroup))
+            la[e.FromGroup].Add(t);
+            if(la[e.FromGroup].Count > 200)
             {
-                if (t == la[e.FromGroup][1] && la[e.FromGroup][0] != la[e.FromGroup][1])
+                la[e.FromGroup].RemoveAt(0);
+            }
+            for (int i = la[e.FromGroup].Count-1;2 * i - la[e.FromGroup].Count >= 0;i--)
+            {
+                bool ok = true;
+                for(int j = i;j < la[e.FromGroup].Count;j++)
                 {
-                    if (t.Contains("复读警察出警"))
+                    if(la[e.FromGroup][i + j - la[e.FromGroup].Count()] != la[e.FromGroup][j])
                     {
-                        Common.CqApi.SendGroupMessage(e.FromGroup, "?");
+                        ok = false;
+                        break;
                     }
-                    else
+                }
+                if(ok)
+                {
+                    if(!la[e.FromGroup][la[e.FromGroup].Count-1].Contains("复读警察出警"))
                     {
                         Common.CqApi.SendGroupMessage(e.FromGroup, "复读警察出警👮");
                     }
-                    la[e.FromGroup][0] = la[e.FromGroup][1];
-                    la[e.FromGroup][1] = t + "???";
+                    else
+                    {
+                        Common.CqApi.SendGroupMessage(e.FromGroup, "复读你🐎呢?");
+                    }
+                    la[e.FromGroup].Clear();
+                    break;
                 }
-                else
-                {
-                    la[e.FromGroup][0] = la[e.FromGroup][1];
-                    la[e.FromGroup][1] = t;
-                }
-            }
-            else
-            {
-                la.Add(e.FromGroup, new string[2] { "", t });
             }
 
+            //正则匹配
             for (int i = 0; i < ge.Count; i++)
             {
                 //holog(ge[i] + "-" + e.Message + "-" + re[i]);
@@ -311,14 +322,8 @@ namespace Native.Csharp.App.Event
                     break;
                 }
             }
-            /*if(Regex.IsMatch(e.Message, "CQ:image:.*"))
-            {
-                MatchCollection mc = Regex.Matches(e.Message, "CQ:image:.*?");
-                foreach(Match m in mc)
-                {
-                    holog(m.ToString());
-                }
-            }*/
+
+            //zzt模拟器
             if(e.FromGroup == 614123891 || e.FromGroup == 776324219 || e.FromGroup == 341475083 || e.FromGroup == 397777390 || e.FromGroup == 274774820)
             {
                 if (e.Message.Length >= 2)
@@ -359,7 +364,7 @@ namespace Native.Csharp.App.Event
                             info += qq[i];
                             if(i != al.Count()-1)
                             {
-                                info += "\r\n";
+                                info += "\n";
                             }
                         }
                         Common.CqApi.SendGroupMessage(e.FromGroup, info);
