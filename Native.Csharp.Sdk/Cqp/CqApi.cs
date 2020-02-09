@@ -1,11 +1,11 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net;
 using System.Runtime.InteropServices;
 using System.Text;
-using System.Text.RegularExpressions;
 using Native.Csharp.Sdk.Cqp.Core;
 using Native.Csharp.Sdk.Cqp.Enum;
 using Native.Csharp.Sdk.Cqp.Expand;
@@ -14,457 +14,961 @@ using Native.Csharp.Sdk.Cqp.Model;
 namespace Native.Csharp.Sdk.Cqp
 {
 	/// <summary>
-	/// 酷Q Api封装类
+	/// 表示 酷Q接口 的封装类
 	/// </summary>
-	public class CqApi
+	public class CQApi
 	{
 		#region --字段--
 		private readonly int _authCode = 0;
-		private readonly Encoding _defaultEncoding = null;
-		private readonly Regex _cookieRegex = null;
-		private string _appDirCache = null;
+		private static readonly Encoding _defaultEncoding = null;
+		private string _appDirectoryCache = null;
 		#endregion
 
 		#region --属性--
 		/// <summary>
-		/// 获取或设置该实例的验证码
+		/// 获取接口默认编码
+		/// </summary>
+		public static Encoding DefaultEncoding { get { return _defaultEncoding; } }
+
+		/// <summary>
+		/// 获取当前实例的验证码
 		/// </summary>
 		public int AuthCode { get { return _authCode; } }
+
+		/// <summary>
+		/// 获取酷Q分配给本应用的数据路径 (所用应用数据应存放于此路径下)
+		/// </summary>
+		public string AppDirectory
+		{
+			get
+			{
+				if (string.IsNullOrEmpty (this._appDirectoryCache))
+				{
+					this._appDirectoryCache = CQP.CQ_getAppDirectory (AuthCode).ToString (DefaultEncoding);
+				}
+				return this._appDirectoryCache;
+			}
+		}
+
+		/// <summary>
+		/// 获取一个值, 指示正在运行的酷Q版本是否支持发送语音
+		/// </summary>
+		public bool IsAllowSendRecord { get { return CQP.CQ_canSendRecord (AuthCode) > 0; } }
+
+		/// <summary>
+		/// 获取一个值, 指示正在运行的酷Q版本是否支持发送图片
+		/// </summary>
+		public bool IsAllowSendImage { get { return CQP.CQ_canSendImage (AuthCode) > 0; } }
 		#endregion
 
 		#region --构造函数--
 		/// <summary>
-		/// 初始化一个 <see cref="CqApi"/> 类的新实例, 该实例将由 <code>Initialize (int)</code> 函数授权
+		/// 静态初始化 <see cref="CQApi"/> 类的静态实例, 该实例只会构造一次, 初始化一些公共资源
 		/// </summary>
-		/// <param name="authCode">插件验证码</param>
-		public CqApi (int authCode)
+		static CQApi ()
+		{
+			_defaultEncoding = Encoding.GetEncoding ("GB18030");
+		}
+
+		/// <summary>
+		/// 初始化 <see cref="CQApi"/> 类的新实例, 该实例由 <code>Initialize</code> 函数进行授权
+		/// </summary>
+		/// <param name="authCode">授权码</param>
+		public CQApi (int authCode)
 		{
 			this._authCode = authCode;
-			this._defaultEncoding = Encoding.GetEncoding ("GB18030");
-			this._cookieRegex = new Regex ("(.*?)=(.*?)(?:;|$)", RegexOptions.Compiled);
 		}
 		#endregion
 
-		#region --CQ码--
+		#region --CQ码类方法--
 		/// <summary>
 		/// 获取酷Q "At某人" 代码
 		/// </summary>
-		/// <param name="qqId">QQ号, 填写 -1 为At全体成员</param>
-		/// <param name="addSpacing">默认为True, At后添加空格, 可使At更规范美观. 如果不需要添加空格, 请置本参数为False</param>
-		/// <returns></returns>
-		public string CqCode_At (long qqId = -1, bool addSpacing = true)
+		/// <param name="qqId">QQ号</param>
+		/// <exception cref="ArgumentOutOfRangeException">参数: qqId 超出范围</exception>
+		/// <returns>返回 <see cref="CQCode"/> 对象</returns>
+		public static CQCode CQCode_At (long qqId)
 		{
-			return string.Format ("[CQ:at,qq={0}]{1}", (qqId == -1) ? "all" : qqId.ToString (), addSpacing ? " " : string.Empty);
+			if (qqId < QQ.MinValue)
+			{
+				throw new ArgumentOutOfRangeException ("qqId");
+			}
+			return new CQCode (
+				CQFunction.At,
+				new KeyValuePair<string, string> ("qq", Convert.ToString (qqId)));
 		}
+
 		/// <summary>
-		/// 获取酷Q "emoji表情" 代码
+		/// 获取酷Q "At某人" 代码
 		/// </summary>
-		/// <param name="id">表情Id</param>
-		/// <returns></returns>
-		public string CqCode_Emoji (int id)
+		/// <param name="qq">QQ对象</param>
+		/// <exception cref="ArgumentNullException">参数: qq 为 null</exception>
+		/// <returns>返回 <see cref="CQCode"/> 对象</returns>
+		public static CQCode CQCode_At (QQ qq)
 		{
-			return string.Format ("[CQ:emoji,id={0}]", id);
+			if (qq == null)
+			{
+				throw new ArgumentNullException ("qq");
+			}
+
+			return CQCode_At (qq.Id);
 		}
+
+		/// <summary>
+		/// 获取酷Q "At全体成员" 代码
+		/// </summary>
+		/// <returns>返回 <see cref="CQCode"/> 对象</returns>
+		public static CQCode CQCode_AtAll ()
+		{
+			return new CQCode (
+				CQFunction.At,
+				new KeyValuePair<string, string> ("qq", "all"));
+		}
+
+		/// <summary>
+		/// 获取酷Q "Emoji" 代码
+		/// </summary>
+		/// <param name="id">Emoji的Id</param>
+		/// <returns>返回 <see cref="CQCode"/> 对象</returns>
+		public static CQCode CQCode_Emoji (int id)
+		{
+			return new CQCode (
+				CQFunction.Emoji,
+				new KeyValuePair<string, string> ("id", Convert.ToString (id)));
+		}
+
 		/// <summary>
 		/// 获取酷Q "表情" 代码
 		/// </summary>
 		/// <param name="face">表情枚举</param>
-		/// <returns></returns>
-		public string CqCode_Face (Face face)
+		/// <returns>返回 <see cref="CQCode"/> 对象</returns>
+		public static CQCode CQCode_Face (CQFace face)
 		{
-			return string.Format ("[CQ:face,id={0}]", (int)face);
+			return new CQCode (
+				CQFunction.Face,
+				new KeyValuePair<string, string> ("id", Convert.ToString ((int)face)));
 		}
+
 		/// <summary>
-		/// 获取酷Q "窗口抖动" 代码
+		/// 获取酷Q "戳一戳" 代码
 		/// </summary>
-		/// <returns></returns>
-		public string CqCode_Shake ()
+		/// <returns>返回 <see cref="CQCode"/> 对象</returns>
+		public static CQCode CQCode_Shake ()
 		{
-			return "[CQ:shake]";
+			return new CQCode (CQFunction.Shake);
 		}
+
 		/// <summary>
-		/// 获取字符串的转义形式
+		/// 获取字符串副本的转义形式
 		/// </summary>
-		/// <param name="str">欲转义字符串</param>
-		/// <param name="commaTrope">逗号转义, 默认: False</param>
-		/// <returns></returns>
-		public string CqCode_Trope (string str, bool commaTrope = false)
+		/// <param name="source">欲转义的原始字符串</param>
+		/// <param name="enCodeComma">是否转义逗号, 默认 <code>false</code></param>
+		/// <exception cref="ArgumentNullException">参数: source 为 null</exception>
+		/// <returns>返回转义后的字符串副本</returns>
+		public static string CQEnCode (string source, bool enCodeComma)
 		{
-			StringBuilder @string = new StringBuilder (str);
-			@string = @string.Replace ("&", "&amp;");
-			@string = @string.Replace ("[", "&#91;");
-			@string = @string.Replace ("]", "&#93;");
-			if (commaTrope)
+			if (source == null)
 			{
-				@string = @string.Replace (",", "&#44;");
+				throw new ArgumentNullException ("source");
 			}
-			return @string.ToString ();
+			StringBuilder builder = new StringBuilder (source);
+			builder = builder.Replace ("&", "&amp;");
+			builder = builder.Replace ("[", "&#91;");
+			builder = builder.Replace ("]", "&#93;");
+			if (enCodeComma)
+			{
+				builder = builder.Replace (",", "&#44;");
+			}
+			return builder.ToString ();
 		}
+
 		/// <summary>
-		/// 获取字符串的非转义形式
+		/// 获取字符串副本的非转义形式
 		/// </summary>
-		/// <param name="str">欲反转义字符串</param>
-		/// <returns></returns>
-		public string CqCode_UnTrope (string str)
+		/// <param name="source">欲反转义的原始字符串</param>
+		/// <exception cref="ArgumentNullException">参数: source 为 null</exception>
+		/// <returns>返回反转义的字符串副本</returns>
+		public static string CQDeCode (string source)
 		{
-			StringBuilder @string = new StringBuilder (str);
-			@string = @string.Replace ("&#91;", "[");
-			@string = @string.Replace ("&#93;", "]");
-			@string = @string.Replace ("&#44;", ",");
-			@string = @string.Replace ("&amp;", "&");
-			return @string.ToString ();
+			if (source == null)
+			{
+				throw new ArgumentNullException ("source");
+			}
+			StringBuilder builder = new StringBuilder (source);
+			builder = builder.Replace ("&#91;", "[");
+			builder = builder.Replace ("&#93;", "]");
+			builder = builder.Replace ("&#44;", ",");
+			builder = builder.Replace ("&amp;", "&");
+			return builder.ToString ();
 		}
+
 		/// <summary>
 		/// 获取酷Q "链接分享" 代码
 		/// </summary>
-		/// <param name="url">分享链接</param>
-		/// <param name="title">分享的标题, 建议12字以内</param>
-		/// <param name="content">分享的简介, 建议30字以内</param>
-		/// <param name="imgUrl">分享的图片链接, 留空则为默认图片</param>
-		/// <returns></returns>
-		public string CqCode_ShareLink (string url, string title, string content, string imgUrl)
+		/// <param name="url">分享的链接</param>
+		/// <param name="title">显示的标题, 建议12字以内</param>
+		/// <param name="content">简介信息, 建议30字以内</param>
+		/// <param name="imageUrl">分享的图片链接, 留空则为默认图片</param>
+		/// <exception cref="ArgumentException">参数: url 是空字符串或为 null</exception>
+		/// <returns>返回 <see cref="CQCode"/> 对象</returns>
+		public static CQCode CQCode_ShareLink (string url, string title, string content, string imageUrl = null)
 		{
-			StringBuilder @string = new StringBuilder ();
-			@string.AppendFormat (",url={0}", CqCode_Trope (url, true));
+			if (string.IsNullOrEmpty (url))
+			{
+				throw new ArgumentException ("分享的链接为空", "url");
+			}
+
+			CQCode code = new CQCode (
+				CQFunction.Share,
+				new KeyValuePair<string, string> ("url", url));
+
 			if (!string.IsNullOrEmpty (title))
 			{
-				@string.AppendFormat (",title={0}", CqCode_Trope (title, true));
+				code.Items.Add ("title", title);
 			}
 			if (!string.IsNullOrEmpty (content))
 			{
-				@string.AppendFormat (",content={0}", CqCode_Trope (content, true));
+				code.Items.Add ("content", content);
 			}
-			if (!string.IsNullOrEmpty (imgUrl))
+			if (!string.IsNullOrEmpty (imageUrl))
 			{
-				@string.AppendFormat (",image={0}", CqCode_Trope (imgUrl, true));
+				code.Items.Add ("image", imageUrl);
 			}
-			return string.Format ("[CQ:share{0}]", @string.ToString ());
+
+			return code;
 		}
+
 		/// <summary>
-		/// 获取酷Q "名片分享" 代码
+		/// 获取酷Q "好友名片分享" 代码
 		/// </summary>
-		/// <param name="cardType">名片类型, qq: 好友分享, group: 群分享</param>
-		/// <param name="id">类型为qq，则为qqId；类型为group，则为groupId</param>
-		/// <returns></returns>
-		public string CqCode_ShareCard (string cardType, long id)
+		/// <param name="qqId">QQ号码</param>
+		/// <exception cref="ArgumentOutOfRangeException">参数: qqId 超出范围</exception>
+		/// <returns>返回 <see cref="CQCode"/> 对象</returns>
+		public static CQCode CQCode_ShareFriendCard (long qqId)
 		{
-			return string.Format ("[CQ:contact,type={0},id={1}]", CqCode_Trope (cardType, true), id);
+			if (qqId < QQ.MinValue)
+			{
+				throw new ArgumentOutOfRangeException ("qqId");
+			}
+			return new CQCode (CQFunction.Contact,
+				new KeyValuePair<string, string> ("type", "qq"),
+				new KeyValuePair<string, string> ("id", Convert.ToString (qqId)));
 		}
+
+		/// <summary>
+		/// 获取酷Q "好友名片分享" 代码
+		/// </summary>
+		/// <param name="qq">QQ号码</param>
+		/// <exception cref="ArgumentNullException">参数: qq 为 null</exception>
+		/// <returns>返回 <see cref="CQCode"/> 对象</returns>
+		public static CQCode CQCode_ShareFriendCard (QQ qq)
+		{
+			if (qq == null)
+			{
+				throw new ArgumentNullException ("qq");
+			}
+
+			return CQCode_ShareFriendCard (qq.Id);
+		}
+
+		/// <summary>
+		/// 获取酷Q "群名片分享" 代码
+		/// </summary>
+		/// <param name="groupId">群组</param>
+		/// <exception cref="ArgumentOutOfRangeException">参数: groupId 超出范围</exception>
+		/// <returns>返回 <see cref="CQCode"/> 对象</returns>
+		public static CQCode CQCode_ShareGroupCard (long groupId)
+		{
+			if (groupId < Group.MinValue)
+			{
+				throw new ArgumentOutOfRangeException ("groupId");
+			}
+			return new CQCode (CQFunction.Contact,
+				new KeyValuePair<string, string> ("type", "group"),
+				new KeyValuePair<string, string> ("group", Convert.ToString (groupId)));
+		}
+
+		/// <summary>
+		/// 获取酷Q "群名片分享" 代码
+		/// </summary>
+		/// <param name="group">群组</param>
+		/// <exception cref="ArgumentNullException">参数: group 为 null</exception>
+		/// <returns>返回 <see cref="CQCode"/> 对象</returns>
+		public static CQCode CQCode_ShareGroupCard (Group group)
+		{
+			if (group == null)
+			{
+				throw new ArgumentNullException ("group");
+			}
+
+			return CQCode_ShareGroupCard (group.Id);
+		}
+
 		/// <summary>
 		/// 获取酷Q "位置分享" 代码
 		/// </summary>
-		/// <param name="site">地点名称, 建议12字以内</param>
+		/// <param name="site">地点, 建议12字以内</param>
 		/// <param name="detail">详细地址, 建议20字以内</param>
 		/// <param name="lat">维度</param>
 		/// <param name="lon">经度</param>
-		/// <param name="zoom">放大倍数, 默认: 15</param>
-		/// <returns></returns>
-		public string CqCode_ShareGPS (string site, string detail, double lat, double lon, int zoom = 15)
+		/// <param name="zoom">放大倍数, 默认: 15倍</param>
+		/// <exception cref="ArgumentException">参数: site 或 detail 是空字符串或为 null</exception>
+		/// <returns>返回 <see cref="CQCode"/> 对象</returns>
+		public static CQCode CQCode_ShareGPS (string site, string detail, double lat, double lon, int zoom = 15)
 		{
-			StringBuilder @string = new StringBuilder ();
-			@string.AppendFormat (",lat={0},lon={1}", lat, lon);
-			@string.AppendFormat (",zoom={0}", zoom);
-			@string.AppendFormat (",title={0},content={1}", CqCode_Trope (site, true), CqCode_Trope (detail, true));
-			return string.Format ("[CQ:location{0}]", @string.ToString ());
+			if (string.IsNullOrEmpty (site))
+			{
+				throw new ArgumentException ("分享的地点不能为空", "site");
+			}
+
+			if (string.IsNullOrEmpty (detail))
+			{
+				throw new ArgumentException ("详细地址不能为空", "detail");
+			}
+
+			return new CQCode (
+				CQFunction.Location,
+				new KeyValuePair<string, string> ("lat", Convert.ToString (lat)),
+				new KeyValuePair<string, string> ("lon", Convert.ToString (lon)),
+				new KeyValuePair<string, string> ("zoom", Convert.ToString (zoom)),
+				new KeyValuePair<string, string> ("title", site),
+				new KeyValuePair<string, string> ("content", detail));
 		}
+
 		/// <summary>
 		/// 获取酷Q "匿名" 代码
 		/// </summary>
-		/// <param name="forced">强制发送
-		/// <para>默认为False 如果希望匿名失败时，将消息转为普通消息发送(而不是取消发送)，请置本参数为True。</para></param>
-		/// <returns></returns>
-		public string CqCode_Anonymous (bool forced = false)
+		/// <param name="forced">强制发送, 若本参数为 <code>true</code> 发送失败时将转换为普通消息</param>
+		/// <returns>返回 <see cref="CQCode"/> 对象</returns>
+		public static CQCode CQCode_Anonymous (bool forced = false)
 		{
-			return string.Format ("[CQ:anonymous{0}]", forced ? ",ignore=true" : string.Empty);
+			CQCode code = new CQCode (CQFunction.Anonymous);
+			if (forced)
+			{
+				code.Items.Add ("ignore", "true");
+			}
+			return code;
 		}
-		/// <summary>
-		/// 获取酷Q "图片" 代码
-		/// </summary>
-		/// <param name="filePath">图片路径
-		/// <para>将图片放在 data\image 下，并填写相对路径。如 data\image\1.jpg 则填写 1.jpg</para></param>
-		/// <returns></returns>
-		public string CqCode_Image (string filePath)
-		{
-			return string.Format ("[CQ:image,file={0}]", CqCode_Trope (filePath, true));
-		}
+
 		/// <summary>
 		/// 获取酷Q "音乐" 代码
 		/// </summary>
-		/// <param name="id">歌曲ID</param>
-		/// <param name="type">歌曲来源, 目前支持 qq/QQ音乐 163/网易云音乐 xiami/虾米音乐，默认为qq</param>
-		/// <param name="newStyle">启用新样式, 目前仅支持 QQ音乐 </param>
-		/// <exception cref="ArgumentException">当参数无效时引发异常</exception>
-		/// <returns></returns>
-		[Obsolete ("本方法已经过时, 且不再使用. 请使用 CqCode_Music 的第二个重载方法")]
-		public string CqCode_Music (long id, string type = "qq", bool newStyle = false)
+		/// <param name="id"></param>
+		/// <param name="type"></param>
+		/// <param name="style"></param>
+		/// <returns>返回 <see cref="CQCode"/> 对象</returns>
+		public static CQCode CQCode_Music (long id, CQMusicType type = CQMusicType.Tencent, CQMusicStyle style = CQMusicStyle.Old)
 		{
-			MusicType musicType;
-			if (type.CompareTo (MusicType.Tencent.GetDescription ()) == 0)
-			{
-				musicType = MusicType.Tencent;
-			}
-			else if (type.CompareTo (MusicType.Netease.GetDescription ()) == 0)
-			{
-				musicType = MusicType.Netease;
-			}
-			else if (type.CompareTo (MusicType.XiaMi.GetDescription ()) == 0)
-			{
-				musicType = MusicType.XiaMi;
-			}
-			else
-			{
-				throw new ArgumentException ("参数: type 无效");
-			}
-			return CqCode_Music (id, musicType, newStyle ? MusicStyle.BigCard : MusicStyle.Old);
+			return new CQCode (
+				CQFunction.Music,
+				new KeyValuePair<string, string> ("id", Convert.ToString (id)),
+				new KeyValuePair<string, string> ("type", type.GetDescription ()),
+				new KeyValuePair<string, string> ("style", Convert.ToString ((int)style)));
 		}
-		/// <summary>
-		/// 获取酷Q "音乐" 代码
-		/// </summary>
-		/// <param name="id">歌曲ID</param>
-		/// <param name="type">歌曲来源</param>
-		/// <param name="style">分享样式</param>
-		/// <returns>返回可发送的 CQ码</returns>
-		public string CqCode_Music (long id, MusicType type = MusicType.Tencent, MusicStyle style = MusicStyle.Old)
-		{
-			return string.Format ("[CQ:music,id={0},type=]", id, type.GetDescription (), (int)style);
-		}
+
 		/// <summary>
 		/// 获取酷Q "音乐自定义" 代码
 		/// </summary>
-		/// <param name="url">分享链接, 点击分享后进入的音乐页面（如歌曲介绍页）</param>
-		/// <param name="musicUrl">歌曲链接, 音乐的音频链接（如mp3链接）</param>
-		/// <param name="title">音乐的标题，建议12字以内</param>
-		/// <param name="content">音乐的简介，建议30字以内</param>
-		/// <param name="imgUrl">音乐的封面图片链接，留空则为默认图片</param>
-		/// <returns></returns>
-		public string CqCode_MusciDIY (string url, string musicUrl, string title = null, string content = null, string imgUrl = null)
+		/// <param name="url">分享链接, 点击后进入的页面 (歌曲介绍)</param>
+		/// <param name="musicUrl">歌曲链接, 音频链接 (mp3链接)</param>
+		/// <param name="title">标题, 建议12字以内</param>
+		/// <param name="content">简介, 建议30字以内</param>
+		/// <param name="imageUrl">封面图片链接, 留空为默认</param>
+		/// <exception cref="ArgumentException">参数: url 或 musicUrl 是空字符串或为 null</exception>
+		/// <returns>返回 <see cref="CQCode"/> 对象</returns>
+		public static CQCode CQCode_DIYMusic (string url, string musicUrl, string title = null, string content = null, string imageUrl = null)
 		{
-			StringBuilder @string = new StringBuilder ();
-			@string.AppendFormat (",url={0}", CqCode_Trope (url, true));
-			@string.AppendFormat (",audio={0}", CqCode_Trope (musicUrl, true));
+			if (string.IsNullOrEmpty (url))
+			{
+				throw new ArgumentException ("分享链接不能为空", "url");
+			}
+
+			if (string.IsNullOrEmpty (musicUrl))
+			{
+				throw new ArgumentException ("歌曲链接不能为空", "musicUrl");
+			}
+
+			CQCode code = new CQCode (
+				CQFunction.Music,
+				new KeyValuePair<string, string> ("type", "custom"),
+				new KeyValuePair<string, string> ("url", url),
+				new KeyValuePair<string, string> ("audio", musicUrl));
 			if (!string.IsNullOrEmpty (title))
 			{
-				@string.AppendFormat (",title={0}", CqCode_Trope (title, true));
+				code.Items.Add ("title", title);
 			}
+
 			if (!string.IsNullOrEmpty (content))
 			{
-				@string.AppendFormat (",content={0}", CqCode_Trope (content, true));
+				code.Items.Add ("content", content);
 			}
-			if (!string.IsNullOrEmpty (imgUrl))
+
+			if (!string.IsNullOrEmpty (imageUrl))
 			{
-				@string.AppendFormat (",image={0}", CqCode_Trope (imgUrl, true));
+				code.Items.Add ("imageUrl", imageUrl);
 			}
-			return string.Format ("[CQ:music,type=custom{0}]", @string.ToString ());
+			return code;
 		}
+
+		/// <summary>
+		/// 获取酷Q "图片" 代码
+		/// </summary>
+		/// <param name="path">图片的路径, 将图片放在 酷Q\data\image 下, 并填写相对路径. 如 酷Q\data\image\1.jpg 则填写 1.jpg</param>
+		/// <exception cref="ArgumentException">参数: path 是空字符串或为 null</exception>
+		/// <returns>返回 <see cref="CQCode"/> 对象</returns>
+		public static CQCode CQCode_Image (string path)
+		{
+			if (string.IsNullOrEmpty (path))
+			{
+				throw new ArgumentException ("路径不能为空", "path");
+			}
+
+			return new CQCode (
+				CQFunction.Image,
+				new KeyValuePair<string, string> ("file", path));
+		}
+
 		/// <summary>
 		/// 获取酷Q "语音" 代码
 		/// </summary>
-		/// <param name="filePath">语音路径
-		/// <para>将语音放在 data\record 下，并填写相对路径。如 data\record\1.amr 则填写 1.amr</para></param>
-		/// <returns></returns>
-		public string CqCode_Record (string filePath)
+		/// <param name="path">语音的路径, 将音频放在 酷Q\data\record 下, 并填写相对路径. 如 酷Q\data\record\1.amr 则填写 1.amr</param>
+		/// <exception cref="ArgumentException">参数: path 是空字符串或为 null</exception>
+		/// <returns>返回 <see cref="CQCode"/> 对象</returns>
+		public static CQCode CQCode_Record (string path)
 		{
-			return string.Format ("[CQ:record,file={0}]", CqCode_Trope (filePath, true));
+			if (string.IsNullOrEmpty (path))
+			{
+				throw new ArgumentException ("语音路径不允许为空", "path");
+			}
+
+			return new CQCode (
+				CQFunction.Record,
+				new KeyValuePair<string, string> ("file", path));
 		}
 		#endregion
 
-		#region --消息--
+		#region --消息类方法--
 		/// <summary>
 		/// 发送群消息
 		/// </summary>
 		/// <param name="groupId">目标群</param>
-		/// <param name="message">消息内容</param>
-		/// <returns>失败返回负值, 成功返回消息 Id</returns>
-		public int SendGroupMessage (long groupId, string message)
+		/// <param name="message">消息内容, 获取内容时将调用<see cref="object.ToString"/>进行消息转换</param>
+		/// <exception cref="ArgumentOutOfRangeException">参数: groupId 超出范围</exception>
+		/// <excpetion cref="ArgumentNullException">参数: message 中含有 null</excpetion>
+		/// <returns>发送成功将返回消息ID, 发送失败则返回负数</returns>
+		public int SendGroupMessage (long groupId, params object[] message)
 		{
-			GCHandle handle = message.GetStringGCHandle (_defaultEncoding);
-			int msgId = CQP.CQ_sendGroupMsg (_authCode, groupId, handle.AddrOfPinnedObject ());
-			handle.Free ();
-			return msgId;
+			if (groupId < Group.MinValue)
+			{
+				throw new ArgumentOutOfRangeException ("groupId");
+			}
+
+			GCHandle messageHandle = message.ToSendString ().GetStringGCHandle (CQApi.DefaultEncoding);
+			try
+			{
+				return CQP.CQ_sendGroupMsg (this.AuthCode, groupId, messageHandle.AddrOfPinnedObject ());
+			}
+			finally
+			{
+				messageHandle.Free ();
+			}
+		}
+
+		/// <summary>
+		/// 发送群消息
+		/// </summary>
+		/// <param name="group">目标群</param>
+		/// <param name="message">消息内容, 获取内容时将调用<see cref="object.ToString"/>进行消息转换</param>
+		/// <excpetion cref="ArgumentNullException">参数: group 是 null 或 message 中含有 null</excpetion>
+		/// <returns>发送成功将返回 <see cref="QQMessage"/> 对象</returns>
+		public QQMessage SendGroupMessage (Group group, params object[] message)
+		{
+			if (group == null)
+			{
+				throw new ArgumentNullException ("group");
+			}
+
+			string msg = message.ToSendString ();
+			int msgId = this.SendGroupMessage (group.Id, msg);
+			return new QQMessage (this, msgId, msg);
 		}
 
 		/// <summary>
 		/// 发送私聊消息
 		/// </summary>
 		/// <param name="qqId">目标QQ</param>
-		/// <param name="message">消息内容</param>
-		/// <returns>失败返回负值, 成功返回消息 Id</returns>
-		public int SendPrivateMessage (long qqId, string message)
+		/// <param name="message">消息内容, 获取内容时将调用<see cref="object.ToString"/>进行消息转换</param>
+		/// <exception cref="ArgumentOutOfRangeException">参数: qqId 超出范围</exception>
+		/// <excpetion cref="ArgumentNullException">当参数: message 中含有 null</excpetion>
+		/// <returns>发送成功将返回消息 Id, 发送失败将返回负值</returns>
+		public int SendPrivateMessage (long qqId, params object[] message)
 		{
-			GCHandle handle = message.GetStringGCHandle (_defaultEncoding);
-			int msgId = CQP.CQ_sendPrivateMsg (_authCode, qqId, handle.AddrOfPinnedObject ());
-			handle.Free ();
-			return msgId;
+			if (qqId < QQ.MinValue)
+			{
+				throw new ArgumentOutOfRangeException ("qqId");
+			}
+
+			GCHandle messageHandle = message.ToSendString ().GetStringGCHandle (CQApi.DefaultEncoding);
+			try
+			{
+				return CQP.CQ_sendPrivateMsg (this.AuthCode, qqId, messageHandle.AddrOfPinnedObject ());
+			}
+			finally
+			{
+				messageHandle.Free ();
+			}
+		}
+
+		/// <summary>
+		/// 发送私聊消息
+		/// </summary>
+		/// <param name="qq">目标QQ</param>
+		/// <param name="message">消息内容, 获取内容时将调用<see cref="object.ToString"/>进行消息转换</param>
+		/// <excpetion cref="ArgumentNullException">参数: qq 是 null 或 message 中含有 null</excpetion>
+		/// <returns>发送成功将返回 <see cref="QQMessage"/> 对象</returns>
+		public QQMessage SendPrivateMessage (QQ qq, params object[] message)
+		{
+			if (qq == null)
+			{
+				throw new ArgumentNullException ("qq");
+			}
+
+			string msg = message.ToSendString ();
+			int msgId = this.SendPrivateMessage (qq.Id, msg);
+			return new QQMessage (this, msgId, msg);
 		}
 
 		/// <summary>
 		/// 发送讨论组消息
 		/// </summary>
 		/// <param name="discussId">目标讨论组</param>
-		/// <param name="message">消息内容</param>
-		/// <returns>失败返回负值, 成功返回消息 Id</returns>
-		public int SendDiscussMessage (long discussId, string message)
+		/// <param name="message">消息内容, 获取内容时将调用<see cref="object.ToString"/>进行消息转换</param>
+		/// <exception cref="ArgumentOutOfRangeException">参数: discussId 超出范围</exception>
+		/// <exception cref="ArgumentNullException">当参数: message 中含有 null</exception>
+		/// <returns>发送成功将返回消息 Id, 发送失败将返回负值</returns>
+		public int SendDiscussMessage (long discussId, params object[] message)
 		{
-			GCHandle handle = message.GetStringGCHandle (_defaultEncoding);
-			int msgid = CQP.CQ_sendDiscussMsg (_authCode, discussId, handle.AddrOfPinnedObject ());
-			handle.Free ();
-			return msgid;
+			if (discussId < Discuss.MinValue)
+			{
+				throw new ArgumentOutOfRangeException ("discussId");
+			}
+
+			GCHandle messageHandle = message.ToSendString ().GetStringGCHandle (CQApi.DefaultEncoding);
+			try
+			{
+				return CQP.CQ_sendDiscussMsg (this.AuthCode, discussId, messageHandle.AddrOfPinnedObject ());
+			}
+			finally
+			{
+				messageHandle.Free ();
+			}
+		}
+
+		/// <summary>
+		/// 发送讨论组消息
+		/// </summary>
+		/// <param name="discuss">目标讨论组</param>
+		/// <param name="message">消息内容, 获取内容时将调用<see cref="object.ToString"/>进行消息转换</param>
+		/// <exception cref="ArgumentNullException">参数: discuss 是 null 或 message 中含有 null</exception>
+		/// <returns>发送成功将返回消息 Id, 发送失败将返回负值</returns>
+		public QQMessage SendDiscussMessage (Discuss discuss, params object[] message)
+		{
+			if (discuss == null)
+			{
+				throw new ArgumentNullException ("discuss");
+			}
+
+			string msg = message.ToSendString ();
+			int msgId = this.SendDiscussMessage (discuss.Id, msg);
+			return new QQMessage (this, msgId, msg);
 		}
 
 		/// <summary>
 		/// 发送赞
 		/// </summary>
 		/// <param name="qqId">目标QQ</param>
-		/// <param name="count">赞的次数，最多10次（留空为1次）</param>
-		/// <returns></returns>
-		public int SendPraise (long qqId, int count = 1)
+		/// <param name="count">发送赞的次数, 范围: 1~10 (留空为1次)</param>
+		/// <exception cref="ArgumentOutOfRangeException">参数: qqId 或 count 超出范围</exception>
+		/// <returns>执行成功返回 <code>true</code>, 失败返回 <code>false</code></returns>
+		public bool SendPraise (long qqId, int count = 1)
 		{
-			if (count < 1)
+			if (qqId < QQ.MinValue)
 			{
-				count = 1;
+				throw new ArgumentOutOfRangeException ("qqId");
 			}
-			if (count > 10)
+
+			if (count < 1 || count > 10)
 			{
-				count = 10;
+				throw new ArgumentOutOfRangeException ("count", count, "点赞次数超出可处理范围, 其次数最少为 1, 最多为 10");
 			}
-			return CQP.CQ_sendLikeV2 (_authCode, qqId, count);
+
+			return CQP.CQ_sendLikeV2 (this.AuthCode, qqId, count) == 0;
 		}
 
 		/// <summary>
-		/// 接收消息中的语音 (含有CQ码 "record" 的消息)
+		/// 发送赞
 		/// </summary>
-		/// <param name="fileName">文件名, 收到消息中的语音文件名(file)</param>
-		/// <param name="formatType">应用所需的语音文件格式</param>
-		/// <returns>返回语音文件绝对路径</returns>
-		public string ReceiveRecord (string fileName, AudioOutFormat formatType)
+		/// <param name="qq">目标QQ</param>
+		/// <param name="count">发送赞的次数, 范围: 1~10 (留空为1次)</param>
+		/// <exception cref="ArgumentNullException">参数: qq 为 null</exception>
+		/// <exception cref="ArgumentOutOfRangeException">参数: count 超出范围</exception>
+		/// <returns>执行成功返回 <code>true</code>, 失败返回 <code>false</code></returns>
+		public bool SendPraise (QQ qq, int count = 1)
 		{
-			return CQP.CQ_getRecordV2 (_authCode, fileName, formatType.GetDescription ());
-		}
+			if (qq == null)
+			{
+				throw new ArgumentNullException ("qq");
+			}
 
-		/// <summary>
-		/// 接收消息中的图片 (含有CQ码 "image" 的消息)
-		/// </summary>
-		/// <param name="fileName"></param>
-		/// <returns>返回图片文件绝对路径</returns>
-		public string ReceiveImage (string fileName)
-		{
-			return CQP.CQ_getImage (_authCode, fileName);
+			return this.SendPraise (qq.Id, count);
 		}
 
 		/// <summary>
 		/// 撤回消息
 		/// </summary>
-		/// <param name="id">消息ID</param>
-		/// <returns></returns>
-		public int RepealMessage (int id)
+		/// <param name="msgId">消息Id</param>
+		/// <exception cref="ArgumentOutOfRangeException">参数: msgId 超出范围</exception>
+		/// <returns>执行成功返回 <code>true</code>, 失败返回 <code>false</code></returns>
+		public bool RemoveMessage (int msgId)
 		{
-			return CQP.CQ_deleteMsg (_authCode, id);
+			if (msgId < 0)
+			{
+				throw new ArgumentOutOfRangeException ("msgId");
+			}
+
+			return CQP.CQ_deleteMsg (this.AuthCode, msgId) == 0;
+		}
+
+		/// <summary>
+		/// 撤回消息
+		/// </summary>
+		/// <param name="message">消息</param>
+		/// <exception cref="ArgumentNullException">参数: message 为 null</exception>
+		/// <returns>执行成功返回 <code>true</code>, 失败返回 <code>false</code></returns>
+		public bool RemoveMessage (QQMessage message)
+		{
+			if (message == null)
+			{
+				throw new ArgumentNullException ("message");
+			}
+
+			return this.RemoveMessage (message.Id);
+		}
+
+		/// <summary>
+		/// 接收消息中的语音 (消息含有CQ码 "record" 的消息)
+		/// </summary>
+		/// <param name="fileName">文件名, [CQ:record...] 中的文件名部分</param>
+		/// <param name="format">所需的目标语音的音频格式</param>
+		/// <exception cref="ArgumentException">参数: fileName 是空字符串或为 null</exception>
+		/// <returns>返回语音文件位于本地服务器的绝对路径</returns>
+		public string ReceiveRecord (string fileName, CQAudioFormat format)
+		{
+			if (string.IsNullOrEmpty (fileName))
+			{
+				throw new ArgumentException ("文件名不可为空", "fileName");
+			}
+
+			GCHandle fileNameHandler = fileName.GetStringGCHandle (CQApi.DefaultEncoding);
+			GCHandle formatHandler = format.GetDescription ().GetStringGCHandle (CQApi.DefaultEncoding);
+
+			try
+			{
+				return CQP.CQ_getRecordV2 (AuthCode, fileNameHandler.AddrOfPinnedObject (), formatHandler.AddrOfPinnedObject ()).ToString (CQApi.DefaultEncoding);
+			}
+			finally
+			{
+				fileNameHandler.Free ();
+				formatHandler.Free ();
+			}
+		}
+
+		/// <summary>
+		/// 接收消息中的语音 (消息含有CQ码 "record" 的消息)
+		/// </summary>
+		/// <param name="recordCode">CQ码对象 <see cref="CQCode"/>, 必须是 <see cref="CQFunction.Record"/> 类型</param>
+		/// <param name="format">所需的目标语音的音频格式</param>
+		/// <exception cref="ArgumentNullException">参数: recordCode 是 null</exception>
+		/// <exception cref="ArgumentException">参数: recordCode 不是 Record 类型</exception>
+		/// <returns>返回语音文件位于本地服务器的绝对路径</returns>
+		public string ReceiveRecord (CQCode recordCode, CQAudioFormat format)
+		{
+			if (recordCode == null)
+			{
+				throw new ArgumentNullException ("recordCode");
+			}
+
+			if (recordCode.Function != CQFunction.Record)
+			{
+				throw new ArgumentException ("传入的CQ码不是 \"Record\" 类型", "recordCode");
+			}
+
+			return this.ReceiveRecord (recordCode.Items["file"], format);
+		}
+
+		/// <summary>
+		/// 接收消息中的图片 (消息含有CQ码 "image" 的消息)
+		/// </summary>
+		/// <param name="fileName">文件名, [CQ:image...] 中的文件名部分</param>
+		/// <exception cref="ArgumentException">文件名为空时发生</exception>
+		/// <returns>返回图片文件位于本地服务器的绝对路径</returns>
+		public string ReceiveImage (string fileName)
+		{
+			if (string.IsNullOrEmpty (fileName))
+			{
+				throw new ArgumentException ("文件名不可为空", "fileName");
+			}
+
+			GCHandle handle = fileName.GetStringGCHandle (CQApi.DefaultEncoding);
+			try
+			{
+				return CQP.CQ_getImage (AuthCode, handle.AddrOfPinnedObject ()).ToString (CQApi.DefaultEncoding);
+			}
+			finally
+			{
+				handle.Free ();
+			}
+		}
+
+		/// <summary>
+		/// 接收消息中的图片 (消息含有CQ码 "image" 的消息)
+		/// </summary>
+		/// <param name="imageCode">CQ码对象 <see cref="CQCode"/>, 必须是 <see cref="CQFunction.Image"/> 类型</param>
+		/// <exception cref="ArgumentNullException">参数: imageCode 是 null</exception>
+		/// <exception cref="ArgumentException">参数: imageCode 不是 Image 类型</exception>
+		/// <returns>返回图片文件位于本地服务器的绝对路径</returns>
+		public string ReceiveImage (CQCode imageCode)
+		{
+			if (imageCode == null)
+			{
+				throw new ArgumentNullException ("imageCode");
+			}
+
+			if (imageCode.Function != CQFunction.Image)
+			{
+				throw new ArgumentException ("传入的CQ码不是 \"Image\" 类型", "imageCode");
+			}
+
+			return this.ReceiveImage (imageCode.Items["file"]);
 		}
 		#endregion
 
-		#region --框架--
+		#region --框架类方法--
 		/// <summary>
-		/// 取登录QQ
+		/// 获取登录帐号
 		/// </summary>
-		/// <returns>返回整数</returns>
-		public long GetLoginQQ ()
+		/// <returns>返回当前酷Q框架登录的帐号</returns>
+		public long GetLoginQQId ()
 		{
-			return CQP.CQ_getLoginQQ (_authCode);
+			return CQP.CQ_getLoginQQ (this.AuthCode);
 		}
 
 		/// <summary>
-		/// 获取当前登录QQ的昵称
+		/// 获取登录帐号
 		/// </summary>
-		/// <returns>返回 GB108030 编码的字符串</returns>
-		public string GetLoginNick ()
+		/// <returns>当前酷Q框架登录的帐号对象</returns>
+		public QQ GetLoginQQ ()
 		{
-			return CQP.CQ_getLoginNick (_authCode).ToString (_defaultEncoding);
-		}
-
-		/// <summary>
-		/// 取应用目录
-		/// </summary>
-		/// <returns>返回本地路径字符串</returns>
-		public string GetAppDirectory ()
-		{
-			if (_appDirCache == null)
-			{
-				_appDirCache = CQP.CQ_getAppDirectory (_authCode);
-			}
-			return _appDirCache;
-		}
-
-		/// <summary>
-		/// 获取 Cookies 慎用,此接口需要严格授权
-		/// </summary>
-		/// <returns>返回 Cookies 字符串</returns>
-		[Obsolete ("此方法已失效, 请使用 GetCookies 的第二个重载. 此方法将永远抛出异常")]
-		public string GetCookies ()
-		{
-			return CQP.CQ_getCookies (_authCode);
-		}
-
-		/// <summary>
-		/// 获取 Cookies 慎用,此接口需要严格授权
-		/// </summary>
-		/// <param name="domain">目标域名, 如 api.example.com</param>
-		/// <returns>返回 Cookies 字符串</returns>
-		public string GetCookies (string domain)
-		{
-			return CQP.CQ_getCookiesV2 (_authCode, domain);
-		}
-
-		/// <summary>
-		/// 获取 Cookies 慎用, 此接口需要严格授权
-		/// </summary>
-		/// <param name="domain">目标域名, 如 api.example.com</param>
-		/// <returns>返回 <see cref="CookieCollection"/> 对象</returns>
-		public CookieCollection GetCookieCollection (string domain)
-		{
-			/*
-             * uin=o2184656498;
-               skey= MVPSrhTvmh;
-               vkey=GC%2FgRGC875U%2Boa09uLp6xdkLMlH0wfbz82373.6720201%3D%3D
-             */
-			CookieCollection collection = new CookieCollection ();
-			MatchCollection matchCollection = _cookieRegex.Matches (GetCookies (domain));    // 根据 Cookies 规则匹配键值
-			foreach (Match item in matchCollection)
-			{
-				collection.Add (new Cookie (item.Groups[1].Value, item.Groups[2].Value));   // 转换为 Cookie 对象
-			}
-			return collection;
-		}
-
-		/// <summary>
-		/// 即QQ网页用到的bkn/g_tk等 慎用,此接口需要严格授权
-		/// </summary>
-		/// <returns>返回 bkn/g_tk 字符串</returns>
-		public int GetCsrfToken ()
-		{
-			return CQP.CQ_getCsrfToken (_authCode);
-		}
-
-		/// <summary>
-		/// 获取QQ信息
-		/// </summary>
-		/// <param name="qqId">目标QQ</param>
-		/// <param name="notCache">不使用缓存, 默认为"False"，通常忽略本参数，仅在必要时使用</param>
-		/// <returns>获取成功返回 <see cref="QQInfo"/>, 失败返回 null</returns>
-		public QQInfo GetQQInfo (long qqId, bool notCache = false)
-		{
-			string result = CQP.CQ_getStrangerInfo (_authCode, qqId, notCache).ToString (Encoding.ASCII);
-			if (string.IsNullOrEmpty (result))
+			long qq = this.GetLoginQQId ();
+			if (qq < QQ.MinValue)
 			{
 				return null;
 			}
-			using (BinaryReader binary = new BinaryReader (new MemoryStream (Convert.FromBase64String (result))))
+			return new QQ (this, qq);
+		}
+
+		/// <summary>
+		/// 获取登录帐号的昵称
+		/// </summary>
+		/// <returns>返回当前登录帐号的昵称字符串</returns>
+		public string GetLoginNick ()
+		{
+			return CQP.CQ_getLoginNick (this.AuthCode).ToString (CQApi.DefaultEncoding);
+		}
+
+		/// <summary>
+		/// 获取 Cookies. 慎用, 此接口需要严格授权
+		/// </summary>
+		/// <param name="domain">要获取的目标域名的 Cookies, 如 api.example.com</param>
+		/// <exception cref="ArgumentNullException">参数: domain 是 null</exception>
+		/// <returns>返回 Cookies 字符串</returns>
+		public string GetCookies (string domain)
+		{
+			if (domain == null)
 			{
-				QQInfo qqInfo = new QQInfo ();
-				qqInfo.Id = binary.ReadInt64_Ex ();
-				qqInfo.Nick = binary.ReadString_Ex (_defaultEncoding);
-				qqInfo.Sex = (Sex)binary.ReadInt32_Ex ();
-				qqInfo.Age = binary.ReadInt32_Ex ();
-				return qqInfo;
+				throw new ArgumentNullException ("domain");
+			}
+
+			GCHandle handle = domain.GetStringGCHandle (CQApi.DefaultEncoding);
+			try
+			{
+				return CQP.CQ_getCookiesV2 (AuthCode, handle.AddrOfPinnedObject ()).ToString (CQApi.DefaultEncoding);
+			}
+			finally
+			{
+				handle.Free ();
+			}
+		}
+
+		/// <summary>
+		/// 获取 Cookies. 慎用, 此接口需要严格授权
+		/// </summary>
+		/// <param name="domain">要获取的目标域名的 Cookies, 如 api.example.com</param>
+		/// <exception cref="ArgumentNullException">参数: domain 是 null</exception>
+		/// <exception cref="ArgumentException">参数: domain 不是正确的 Uri</exception>
+		/// <returns>返回 Cookies 的 <see cref="CookieCollection"/></returns>
+		public CookieCollection GetCookieCollection (string domain)
+		{
+			if (domain == null)
+			{
+				throw new ArgumentNullException ("domain");
+			}
+
+			try
+			{
+				// 初始化域名对象
+				Uri uri = new Uri (domain);
+
+				// 使用 Container 对象解析Cookies
+				CookieContainer container = new CookieContainer ();
+				container.SetCookies (uri, this.GetCookies (domain).Replace (';', ','));    // 替换分隔符以解析
+
+				// 返回实例
+				return container.GetCookies (uri);
+			}
+			catch (UriFormatException ex)
+			{
+				throw new ArgumentException ("domain", ex);
+			}
+			catch (CookieException)
+			{
+				return null;
+			}
+		}
+
+		/// <summary>
+		/// 获取登录QQ网页需要用到的 bkn/g_tk 等. 慎用, 此接口需要严格收取
+		/// </summary>
+		/// <returns>返回 bkn/g_tk 值</returns>
+		public int GetCsrfToken ()
+		{
+			return CQP.CQ_getCsrfToken (this.AuthCode);
+		}
+
+		/// <summary>
+		/// 获取陌生人信息
+		/// </summary>
+		/// <param name="qqId">目标QQ</param>
+		/// <param name="notCache">不使用缓存, 默认为 <code>false</code>, 通常忽略本参数, 仅在必要时使用</param>
+		/// <exception cref="ArgumentOutOfRangeException">参数: qqId 超出范围</exception>
+		/// <exception cref="InvalidDataException">获取信息时得到的数据流错误</exception>
+		/// <returns>获取成功返回 <see cref="StrangerInfo"/>, 失败返回 <code>null</code></returns>
+		public StrangerInfo GetStrangerInfo (long qqId, bool notCache = false)
+		{
+			if (qqId < QQ.MinValue)
+			{
+				throw new ArgumentOutOfRangeException ("qqId");
+			}
+
+			byte[] data = Convert.FromBase64String (CQP.CQ_getStrangerInfo (this.AuthCode, qqId, notCache).ToString (CQApi.DefaultEncoding));
+			try
+			{
+				return new StrangerInfo (this, data);
+			}
+#if DEBUG
+			catch (ArgumentNullException ex)
+			{
+				throw new InvalidDataException ("数据流格式错误", ex);
+			}
+#else
+			catch (ArgumentNullException)
+			{
+				return null;
+			}
+#endif
+		}
+
+		/// <summary>
+		/// 获取陌生人信息
+		/// </summary>
+		/// <param name="qq">目标QQ</param>
+		/// <param name="notCache">不使用缓存, 默认为 <code>false</code>, 通常忽略本参数, 仅在必要时使用</param>
+		/// <exception cref="ArgumentNullException">参数: qq 是 null</exception>
+		/// <exception cref="InvalidDataException">获取信息时得到的数据流错误</exception>
+		/// <returns>获取成功返回 <see cref="StrangerInfo"/>, 失败返回 <code>null</code></returns>
+		public StrangerInfo GetStrangerInfo (QQ qq, bool notCache = false)
+		{
+			if (qq == null)
+			{
+				throw new ArgumentNullException ("qq");
+			}
+
+			try
+			{
+				return this.GetStrangerInfo (qq.Id, notCache);
+			}
+			catch (InvalidDataException)
+			{
+				throw;
+			}
+		}
+
+		/// <summary>
+		/// 获取好友列表
+		/// </summary>
+		/// <exception cref="InvalidDataException">数据流格式错误或为 null</exception>
+		/// <exception cref="EndOfStreamException">无法读取数据, 因为已经读取到数据流末尾</exception>
+		/// <returns>获取成功返回 <see cref="List{FriendInfo}"/>, 失败返回 <code>null</code></returns>
+		public List<FriendInfo> GetFriendList ()
+		{
+			byte[] data = Convert.FromBase64String (CQP.CQ_getFriendList (AuthCode, false).ToString (_defaultEncoding));
+			if (data == null)
+			{
+#if DEBUG
+				throw new InvalidDataException ("获取的数据为 null");
+#else
+				return null;
+#endif
+			}
+			using (BinaryReader reader = new BinaryReader (new MemoryStream (data)))
+			{
+				List<FriendInfo> tempFriends = new List<FriendInfo> (reader.ReadInt32_Ex ());
+				for (int i = 0; i < tempFriends.Capacity; i++)
+				{
+					if (reader.Length () <= 0)
+					{
+#if DEBUG
+						throw new EndOfStreamException ("无法读取数据, 因为已读取到数据流末尾");
+#else
+						return null;
+#endif
+					}
+
+					try
+					{
+						tempFriends.Add (new FriendInfo (this, reader.ReadToken_Ex ()));
+					}
+#if DEBUG
+					catch (ArgumentNullException ex)
+					{
+						throw new InvalidDataException ("数据流格式错误", ex);
+					}
+					catch (InvalidDataException ex)
+					{
+						throw new EndOfStreamException ("无法读取数据, 因为已读取到数据流末尾", ex);
+					}
+#else
+					catch (ArgumentNullException)
+					{
+						return null;
+					}
+					catch (InvalidDataException)
+					{
+						return null;
+					}
+#endif
+				}
+				return tempFriends;
 			}
 		}
 
@@ -472,191 +976,1083 @@ namespace Native.Csharp.Sdk.Cqp
 		/// 获取群成员信息
 		/// </summary>
 		/// <param name="groupId">目标群</param>
-		/// <param name="qqId">目标QQ</param>
-		/// <param name="notCache">默认为 "Flase", 通常忽略本参数, 仅在必要的是否使用</param>
-		/// <returns>获取成功返回 <see cref="GroupMemberInfo"/>, 失败返回 null</returns>
-		public GroupMemberInfo GetMemberInfo (long groupId, long qqId, bool notCache = false)
+		/// <param name="qqId">目标帐号</param>
+		/// <param name="notCache">不使用缓存, 默认为 <code>false</code>, 通常忽略本参数, 仅在必要时使用</param>
+		/// <exception cref="ArgumentOutOfRangeException">参数: groupId 或 qqId 超出范围</exception>
+		/// <exception cref="InvalidDataException">数据流格式错误 或为 null</exception>
+		/// <exception cref="EndOfStreamException">无法读取数据, 因为已读取到数据流末尾</exception>
+		/// <returns>获取成功返回 <see cref="GroupMemberInfo"/>, 失败返回 <code>null</code></returns>
+		public GroupMemberInfo GetGroupMemberInfo (long groupId, long qqId, bool notCache = false)
 		{
-			string result = CQP.CQ_getGroupMemberInfoV2 (_authCode, groupId, qqId, notCache).ToString (Encoding.ASCII);
-			if (string.IsNullOrEmpty (result))
+			if (groupId < Group.MinValue)
+			{
+				throw new ArgumentOutOfRangeException ("groupId");
+			}
+
+			if (qqId < QQ.MinValue)
+			{
+				throw new ArgumentOutOfRangeException ("qqId");
+			}
+
+			byte[] data = Convert.FromBase64String (CQP.CQ_getGroupMemberInfoV2 (this.AuthCode, groupId, qqId, notCache).ToString (CQApi.DefaultEncoding));
+			try
+			{
+				return new GroupMemberInfo (this, data);
+			}
+#if DEBUG
+			catch (ArgumentNullException ex)
+			{
+				throw new InvalidDataException ("数据流格式错误或数据流为 null", ex);
+			}
+			catch (InvalidDataException ex)
+			{
+				throw new EndOfStreamException ("无法读取数据, 因为已读取到数据流末尾", ex);
+			}
+#else
+			catch (ArgumentNullException)
 			{
 				return null;
 			}
-			#region --其它_转换_文本到群成员信息--
-			using (BinaryReader binary = new BinaryReader (new MemoryStream (Convert.FromBase64String (result))))
+			catch (InvalidDataException)
 			{
-				GroupMemberInfo member = new GroupMemberInfo ();
-				member.GroupId = binary.ReadInt64_Ex ();
-				member.QQId = binary.ReadInt64_Ex ();
-				member.Nick = binary.ReadString_Ex (_defaultEncoding);
-				member.Card = binary.ReadString_Ex (_defaultEncoding);
-				member.Sex = (Sex)binary.ReadInt32_Ex ();
-				member.Age = binary.ReadInt32_Ex ();
-				member.Area = binary.ReadString_Ex (_defaultEncoding);
-				member.JoiningTime = binary.ReadInt32_Ex ().ToDateTime ();
-				member.LastDateTime = binary.ReadInt32_Ex ().ToDateTime ();
-				member.Level = binary.ReadString_Ex (_defaultEncoding);
-				member.PermitType = (PermitType)binary.ReadInt32_Ex ();
-				member.BadRecord = binary.ReadInt32_Ex () == 1;
-				member.SpecialTitle = binary.ReadString_Ex (_defaultEncoding);
-				member.SpecialTitleDurationTime = binary.ReadInt32_Ex ().ToDateTime ();
-				member.CanModifiedCard = binary.ReadInt32_Ex () == 1;
-				return member;
+				return null;
 			}
-			#endregion
+#endif
+		}
+
+		/// <summary>
+		/// 获取群成员信息
+		/// </summary>
+		/// <param name="group">目标群</param>
+		/// <param name="qq">目标帐号</param>
+		/// <param name="notCache">不使用缓存, 默认为 <code>false</code>, 通常忽略本参数, 仅在必要时使用</param>
+		/// <exception cref="ArgumentNullException">参数: group 为 null 或 qq 为 null</exception>
+		/// <exception cref="InvalidDataException">数据流格式错误</exception>
+		/// <exception cref="EndOfStreamException">无法读取数据, 因为已读取到数据流末尾</exception>
+		/// <returns>获取成功返回 <see cref="GroupMemberInfo"/>, 失败返回 <code>null</code></returns>
+		public GroupMemberInfo GetGroupMemberInfo (Group group, QQ qq, bool notCache = false)
+		{
+			if (group == null)
+			{
+				throw new ArgumentNullException ("group");
+			}
+
+			if (qq == null)
+			{
+				throw new ArgumentNullException ("qq");
+			}
+
+			try
+			{
+				return this.GetGroupMemberInfo (group.Id, qq.Id, notCache);
+			}
+			catch (InvalidDataException)
+			{
+				throw;
+			}
+			catch (EndOfStreamException)
+			{
+				throw;
+			}
 		}
 
 		/// <summary>
 		/// 获取群成员列表
 		/// </summary>
-		/// <param name="groupId">目标群</param>
-		/// <returns>获取成功返回 <see cref="List{GroupMember}"/>, 失败返回 null</returns>
-		public List<GroupMemberInfo> GetMemberList (long groupId)
+		/// <param name="groupId">目标群号</param>
+		/// <exception cref="ArgumentOutOfRangeException">参数: groupId 超出范围</exception>
+		/// <exception cref="InvalidDataException">数据流格式错误或为 null</exception>
+		/// <exception cref="EndOfStreamException">无法读取数据, 因为已读取到数据流末尾</exception>
+		/// <returns>获取成功返回 <see cref="List{GroupMemberInfo}"/>, 失败返回 <code>null</code></returns>
+		public List<GroupMemberInfo> GetGroupMemberList (long groupId)
 		{
-			string result = CQP.CQ_getGroupMemberList (_authCode, groupId).ToString (Encoding.ASCII);
-			if (string.IsNullOrEmpty (result))
+			if (groupId < Group.MinValue)
 			{
-				return null;
+				throw new ArgumentOutOfRangeException ("groupId");
 			}
-			#region --其他_转换_文本到群成员列表信息a--
-			using (BinaryReader binary = new BinaryReader (new MemoryStream (Convert.FromBase64String (result))))
+
+			byte[] data = Convert.FromBase64String (CQP.CQ_getGroupMemberList (this.AuthCode, groupId).ToString (CQApi.DefaultEncoding));
+			if (data == null)
 			{
-				List<GroupMemberInfo> memberInfos = new List<GroupMemberInfo> ();
-				for (int i = 0, len = binary.ReadInt32_Ex (); i < len; i++)
+#if DEBUG
+				throw new InvalidDataException ("获取的数据为 null");
+#else
+				return null;
+#endif
+			}
+
+			using (BinaryReader reader = new BinaryReader (new MemoryStream (data)))
+			{
+				List<GroupMemberInfo> members = new List<GroupMemberInfo> (reader.ReadInt32_Ex ());
+				for (int i = 0; i < members.Capacity; i++)
 				{
-					if (binary.Length () <= 0)
+					if (reader.Length () <= 0)
+					{
+#if DEBUG
+						throw new EndOfStreamException ("无法读取数据, 因为已读取到数据流末尾");
+#else
+						return null;
+#endif
+					}
+
+					try
+					{
+						members.Add (new GroupMemberInfo (this, reader.ReadToken_Ex ()));
+					}
+#if DEBUG
+					catch (ArgumentNullException ex)
+					{
+						throw new InvalidDataException ("数据流格式错误", ex);
+					}
+					catch (InvalidDataException ex)
+					{
+						throw new EndOfStreamException ("无法读取数据, 因为已读取到数据流末尾", ex);
+					}
+#else
+					catch (ArgumentNullException)
 					{
 						return null;
 					}
-					#region --其它_转换_ansihex到群成员信息--
-					using (BinaryReader tempBinary = new BinaryReader (new MemoryStream (binary.ReadToken_Ex ()))) //解析群成员信息
+					catch (InvalidDataException)
 					{
-						GroupMemberInfo member = new GroupMemberInfo ();
-						member.GroupId = tempBinary.ReadInt64_Ex ();
-						member.QQId = tempBinary.ReadInt64_Ex ();
-						member.Nick = tempBinary.ReadString_Ex (_defaultEncoding);
-						member.Card = tempBinary.ReadString_Ex (_defaultEncoding);
-						member.Sex = (Sex)tempBinary.ReadInt32_Ex ();
-						member.Age = tempBinary.ReadInt32_Ex ();
-						member.Area = tempBinary.ReadString_Ex (_defaultEncoding);
-						member.JoiningTime = tempBinary.ReadInt32_Ex ().ToDateTime ();
-						member.LastDateTime = tempBinary.ReadInt32_Ex ().ToDateTime ();
-						member.Level = tempBinary.ReadString_Ex (_defaultEncoding);
-						member.PermitType = (PermitType)tempBinary.ReadInt32_Ex ();
-						member.BadRecord = tempBinary.ReadInt32_Ex () == 1;
-						member.SpecialTitle = tempBinary.ReadString_Ex (_defaultEncoding);
-						member.SpecialTitleDurationTime = tempBinary.ReadInt32_Ex ().ToDateTime ();
-						member.CanModifiedCard = tempBinary.ReadInt32_Ex () == 1;
-						memberInfos.Add (member);
+						return null;
 					}
-					#endregion
+#endif
 				}
-				return memberInfos;
+
+				return members;
 			}
-			#endregion
+
+		}
+
+		/// <summary>
+		/// 获取群成员列表
+		/// </summary>
+		/// <param name="group">目标群号</param>
+		/// <exception cref="ArgumentNullException">参数: group 为 null</exception>
+		/// <exception cref="InvalidDataException">数据流格式错误或为 null</exception>
+		/// <exception cref="EndOfStreamException">无法读取数据, 因为已读取到数据流末尾</exception>
+		/// <returns>获取成功返回 <see cref="List{GroupMemberInfo}"/>, 失败返回 <code>null</code></returns>
+		public List<GroupMemberInfo> GetGroupMemberList (Group group)
+		{
+			if (group == null)
+			{
+				throw new ArgumentNullException ("group");
+			}
+
+			try
+			{
+				return this.GetGroupMemberList (group.Id);
+			}
+			catch (InvalidDataException)
+			{
+				throw;
+			}
+			catch (EndOfStreamException)
+			{
+				throw;
+			}
+		}
+
+		/// <summary>
+		/// 获取群信息
+		/// </summary>
+		/// <param name="groupId">目标群号</param>
+		/// <param name="notCache">不使用缓存, 通常为 <code>false</code>, 仅在必要时使用</param>
+		/// <exception cref="ArgumentOutOfRangeException">参数: groupId 超出范围</exception>
+		/// <exception cref="InvalidDataException">数据流格式错误或为 null</exception>
+		/// <exception cref="EndOfStreamException">无法读取数据, 因为已读取到数据流末尾</exception>
+		/// <returns>获取成功返回 <see cref="GroupInfo"/> 对象, 失败返回 <code>null</code></returns>
+		public GroupInfo GetGroupInfo (long groupId, bool notCache = false)
+		{
+			if (groupId < Group.MinValue)
+			{
+				throw new ArgumentOutOfRangeException ("groupId");
+			}
+
+			byte[] data = Convert.FromBase64String (CQP.CQ_getGroupInfo (this.AuthCode, groupId, notCache).ToString (CQApi.DefaultEncoding));
+
+			try
+			{
+				return new GroupInfo (this, data);
+			}
+#if DEBUG
+			catch (ArgumentNullException ex)
+			{
+				throw new InvalidDataException ("数据流格式错误或为 null", ex);
+			}
+			catch (InvalidDataException ex)
+			{
+				throw new EndOfStreamException ("无法读取数据, 因为已读取到数据流末尾", ex);
+			}
+#else
+			catch (ArgumentNullException)
+			{
+				return null;
+			}
+			catch (InvalidDataException)
+			{
+				return null;
+			}
+#endif
+		}
+
+		/// <summary>
+		/// 获取群信息
+		/// </summary>
+		/// <param name="group">目标群号</param>
+		/// <param name="notCache">不使用缓存, 通常为 <code>false</code>, 仅在必要时使用</param>
+		/// <exception cref="ArgumentNullException">参数: group 为 null</exception>
+		/// <exception cref="InvalidDataException">数据流格式错误或为 null</exception>
+		/// <exception cref="EndOfStreamException">无法读取数据, 因为已读取到数据流末尾</exception>
+		/// <returns>获取成功返回 <see cref="GroupInfo"/> 对象, 失败返回 <code>null</code></returns>
+		public GroupInfo GetGroupInfo (Group group, bool notCache = false)
+		{
+			if (group == null)
+			{
+				throw new ArgumentNullException ("group");
+			}
+
+			try
+			{
+				return this.GetGroupInfo (group.Id, notCache);
+			}
+			catch (InvalidDataException)
+			{
+				throw;
+			}
+			catch (EndOfStreamException)
+			{
+				throw;
+			}
 		}
 
 		/// <summary>
 		/// 获取群列表
 		/// </summary>
-		/// <returns>获取成功返回 <see cref="List{Group}"/>, 失败返回 null</returns>
-		public List<Model.GroupInfo> GetGroupList ()
+		/// <exception cref="InvalidDataException">数据流格式错误或为 null</exception>
+		/// <exception cref="EndOfStreamException">无法读取数据, 因为已读取到数据流末尾</exception>
+		/// <returns>获取成功返回 <see cref="List{GroupInfo}"/> 对象, 失败返回 <code>null</code></returns>
+		public List<GroupInfo> GetGroupList ()
 		{
-			string result = CQP.CQ_getGroupList (_authCode).ToString (Encoding.ASCII);
-			if (string.IsNullOrEmpty (result))
+			byte[] data = Convert.FromBase64String (CQP.CQ_getGroupList (AuthCode).ToString (Encoding.ASCII));
+			if (data == null)
 			{
+#if DEBUG
+				throw new InvalidDataException ("获取的数据为 null");
+#else
 				return null;
+#endif
 			}
-			List<Model.GroupInfo> groups = new List<Model.GroupInfo> ();
-			#region --其他_转换_文本到群列表信息a--
-			using (BinaryReader binary = new BinaryReader (new MemoryStream (Convert.FromBase64String (result))))
+
+			using (BinaryReader reader = new BinaryReader (new MemoryStream (data)))
 			{
-				for (int i = 0, len = binary.ReadInt32_Ex (); i < len; i++)
+				List<GroupInfo> tempGroups = new List<GroupInfo> (reader.ReadInt32_Ex ());
+				for (int i = 0; i < tempGroups.Capacity; i++)
 				{
-					if (binary.Length () <= 0)
+					if (reader.Length () <= 0)
+					{
+#if DEBUG
+						throw new EndOfStreamException ("无法读取数据, 因为已读取到数据流末尾");
+#else
+						return null;
+#endif
+					}
+
+					try
+					{
+						tempGroups.Add (new GroupInfo (this, reader.ReadToken_Ex (), true));
+					}
+#if DEBUG
+					catch (ArgumentNullException ex)
+					{
+						throw new InvalidDataException ("数据流格式错误", ex);
+					}
+					catch (InvalidDataException ex)
+					{
+						throw new EndOfStreamException ("无法读取数据, 因为已读取到数据流末尾", ex);
+					}
+#else
+					catch (ArgumentNullException)
 					{
 						return null;
 					}
-					#region --其他_转换_ansihex到群信息--
-					using (BinaryReader tempBinary = new BinaryReader (new MemoryStream (binary.ReadToken_Ex ())))
+					catch (InvalidDataException)
 					{
-						Model.GroupInfo group = new Model.GroupInfo ();
-						group.Id = tempBinary.ReadInt64_Ex ();
-						group.Name = tempBinary.ReadString_Ex (_defaultEncoding);
-						groups.Add (group);
+						return null;
 					}
-					#endregion
+#endif
 				}
-				return groups;
+				return tempGroups;
 			}
-			#endregion
-		}
-
-		/// <summary>
-		/// 获取发送语音支持
-		/// </summary>
-		/// <returns></returns>
-		public bool GetSendRecordSupport ()
-		{
-			return CQP.CQ_canSendRecord (_authCode) > 0;
-		}
-
-		/// <summary>
-		/// 获取发送图片支持
-		/// </summary>
-		/// <returns></returns>
-		public bool GetSendImageSupport ()
-		{
-			return CQP.CQ_canSendImage (_authCode) > 0;
 		}
 		#endregion
 
-		#region --日志--
+		#region --群管理方法--
 		/// <summary>
-		/// 添加日志
+		/// 设置群匿名成员禁言
 		/// </summary>
-		/// <param name="level">级别</param>
-		/// <param name="type">类型</param>
-		/// <param name="content">内容</param>
-		/// <returns></returns>
-		public int AddLoger (LogerLevel level, string type, string content)
+		/// <param name="groupId">目标群</param>
+		/// <param name="anonymous">目标群成员匿名信息</param>
+		/// <param name="time">禁言的时长 (范围: 1秒 ~ 30天)</param>
+		/// <exception cref="ArgumentOutOfRangeException">参数: groupId 或 time 超出范围</exception>
+		/// <exception cref="ArgumentNullException">参数: anonymous 是 null</exception>
+		/// <returns>禁言成功返回 <code>true</code>, 否则返回 <code>false</code></returns>
+		public bool SetGroupAnonymousMemberBanSpeak (long groupId, GroupMemberAnonymousInfo anonymous, TimeSpan time)
 		{
-			GCHandle handle = content.GetStringGCHandle (_defaultEncoding);
-			int result = CQP.CQ_addLog (_authCode, (int)level, type, handle.AddrOfPinnedObject ());
-			handle.Free ();
-			return result;
+			if (groupId < Group.MinValue)
+			{
+				throw new ArgumentOutOfRangeException ("groupId");
+			}
 
+			if (anonymous == null)
+			{
+				throw new ArgumentNullException ("anonymous");
+			}
+
+			if (time.TotalSeconds <= 0 || time.TotalSeconds > 2592000)  //要在 1秒 ~ 30天 的范围内
+			{
+				throw new ArgumentOutOfRangeException ("time");
+			}
+
+			GCHandle anonymousHandle = anonymous.OriginalString.GetStringGCHandle (CQApi.DefaultEncoding);
+			try
+			{
+				return CQP.CQ_setGroupAnonymousBan (this.AuthCode, groupId, anonymousHandle.AddrOfPinnedObject (), (long)time.TotalSeconds) == 0;
+			}
+			finally
+			{
+				anonymousHandle.Free ();
+			}
 		}
 
 		/// <summary>
-		/// 添加致命错误提示
+		/// 设置群匿名成员禁言
 		/// </summary>
-		/// <param name="message">错误信息</param>
-		/// <returns></returns>
-		public int AddFatalError (string message)
+		/// <param name="group">目标群</param>
+		/// <param name="anonymous">目标群成员匿名信息</param>
+		/// <param name="time">禁言的时长 (范围: 1秒 ~ 30天)</param>
+		/// <exception cref="ArgumentNullException">参数: group 或 anonymous 是 null</exception>
+		/// <exception cref="ArgumentOutOfRangeException">参数: time 超出范围</exception>
+		/// <returns>禁言成功返回 <code>true</code>, 否则返回 <code>false</code></returns>
+		public bool SetGroupAnonymousMemberBanSpeak (Group group, GroupMemberAnonymousInfo anonymous, TimeSpan time)
 		{
-			return CQP.CQ_setFatal (_authCode, message);
+			if (group == null)
+			{
+				throw new ArgumentNullException ("group");
+			}
+
+			try
+			{
+				return this.SetGroupAnonymousMemberBanSpeak (group.Id, anonymous, time);
+			}
+			catch (ArgumentOutOfRangeException)
+			{
+				throw;
+			}
+			catch (ArgumentNullException)
+			{
+				throw;
+			}
+		}
+
+		/// <summary>
+		/// 设置群成员禁言
+		/// </summary>
+		/// <param name="groupId">目标群号</param>
+		/// <param name="qqId">目标QQ</param>
+		/// <param name="time">禁言时长 (范围: 1秒 ~ 30天)</param>
+		/// <exception cref="ArgumentOutOfRangeException">参数: groupId 、qqId 或 time 超出范围</exception>
+		/// <returns>禁言成功返回 <code>true</code>, 否则返回 <code>false</code></returns>
+		public bool SetGroupMemberBanSpeak (long groupId, long qqId, TimeSpan time)
+		{
+			if (groupId < Group.MinValue)
+			{
+				throw new ArgumentOutOfRangeException ("groupId");
+			}
+
+			if (qqId < QQ.MinValue)
+			{
+				throw new ArgumentOutOfRangeException ("qqId");
+			}
+
+			if (time.TotalSeconds <= 0 || time.TotalSeconds > 2592000)  //要在 1秒 ~ 30天 的范围内
+			{
+				throw new ArgumentOutOfRangeException ("time");
+			}
+
+			return CQP.CQ_setGroupBan (this.AuthCode, groupId, qqId, (long)time.TotalSeconds) == 0;
+		}
+
+		/// <summary>
+		/// 设置群成员禁言
+		/// </summary>
+		/// <param name="group">目标群号</param>
+		/// <param name="qq">目标QQ</param>
+		/// <param name="time">禁言时长 (范围: 1秒 ~ 30天)</param>
+		/// <exception cref="ArgumentNullException">参数: group 或 qq 为 null</exception>
+		/// <exception cref="ArgumentOutOfRangeException">参数: time 超出范围</exception>
+		/// <returns>禁言成功返回 <code>true</code>, 否则返回 <code>false</code></returns>
+		public bool SetGroupMemberBanSpeak (Group group, QQ qq, TimeSpan time)
+		{
+			if (group == null)
+			{
+				throw new ArgumentNullException ("group");
+			}
+
+			if (qq == null)
+			{
+				throw new ArgumentNullException ("qq");
+			}
+
+			try
+			{
+				return this.SetGroupMemberBanSpeak (group.Id, qq.Id, time);
+			}
+			catch (ArgumentOutOfRangeException)
+			{
+				throw;
+			}
+		}
+
+		/// <summary>
+		/// 解除群成员禁言
+		/// </summary>
+		/// <param name="groupId">目标群号</param>
+		/// <param name="qqId">目标QQ</param>
+		/// <exception cref="ArgumentOutOfRangeException">参数: groupId 或 qqId 超出范围</exception>
+		/// <returns>禁言成功返回 <code>true</code>, 否则返回 <code>false</code></returns>
+		public bool RemoveGroupMemberBanSpeak (long groupId, long qqId)
+		{
+			if (groupId < Group.MinValue)
+			{
+				throw new ArgumentOutOfRangeException ("groupId");
+			}
+
+			if (qqId < QQ.MinValue)
+			{
+				throw new ArgumentOutOfRangeException ("qqId");
+			}
+
+			return CQP.CQ_setGroupBan (this.AuthCode, groupId, qqId, 0) == 0;
+		}
+
+		/// <summary>
+		/// 解除群成员禁言
+		/// </summary>
+		/// <param name="group">目标群号</param>
+		/// <param name="qq">目标QQ</param>
+		/// <exception cref="ArgumentNullException">参数: group 或 qq 为 null</exception>
+		/// <returns>禁言成功返回 <code>true</code>, 否则返回 <code>false</code></returns>
+		public bool RemoveGroupMemberBanSpeak (Group group, QQ qq)
+		{
+			if (group == null)
+			{
+				throw new ArgumentNullException ("group");
+			}
+
+			if (qq == null)
+			{
+				throw new ArgumentNullException ("qq");
+			}
+
+			return this.RemoveGroupMemberBanSpeak (group.Id, qq.Id);
+		}
+
+		/// <summary>
+		/// 设置群全体禁言
+		/// </summary>
+		/// <param name="groupId">目标群</param>
+		/// <exception cref="ArgumentOutOfRangeException">参数: groupId 超出范围</exception>
+		/// <returns>操作成功返回 <code>true</code>, 失败返回 <code>false</code></returns>
+		public bool SetGroupBanSpeak (long groupId)
+		{
+			if (groupId < Group.MinValue)
+			{
+				throw new ArgumentOutOfRangeException ("groupId");
+			}
+
+			return CQP.CQ_setGroupWholeBan (this.AuthCode, groupId, true) == 0;
+		}
+
+		/// <summary>
+		/// 设置群全体禁言
+		/// </summary>
+		/// <param name="group">目标群</param>
+		/// <exception cref="ArgumentNullException">参数: group 为 null</exception>
+		/// <returns>操作成功返回 <code>true</code>, 失败返回 <code>false</code></returns>
+		public bool SetGroupBanSpeak (Group group)
+		{
+			if (group == null)
+			{
+				throw new ArgumentNullException ("group");
+			}
+
+			return this.SetGroupBanSpeak (group.Id);
+		}
+
+		/// <summary>
+		/// 解除群全体禁言
+		/// </summary>
+		/// <param name="groupId">目标群</param>
+		/// <exception cref="ArgumentOutOfRangeException">参数: groupId 超出范围</exception>
+		/// <returns>操作成功返回 <code>true</code>, 失败返回 <code>false</code></returns>
+		public bool RemoveGroupBanSpeak (long groupId)
+		{
+			if (groupId < Group.MinValue)
+			{
+				throw new ArgumentOutOfRangeException ("groupId");
+			}
+
+			return CQP.CQ_setGroupWholeBan (this.AuthCode, groupId, false) == 0;
+		}
+
+		/// <summary>
+		/// 解除群全体禁言
+		/// </summary>
+		/// <param name="group">目标群</param>
+		/// <exception cref="ArgumentNullException">参数: group 为 null</exception>
+		/// <returns>操作成功返回 <code>true</code>, 失败返回 <code>false</code></returns>
+		public bool RemoveGroupBanSpeak (Group group)
+		{
+			if (group == null)
+			{
+				throw new ArgumentNullException ("group");
+			}
+
+			return this.RemoveGroupBanSpeak (group.Id);
+		}
+
+		/// <summary>
+		/// 设置群成员名片
+		/// </summary>
+		/// <param name="groupId">目标群</param>
+		/// <param name="qqId">目标QQ</param>
+		/// <param name="newName">新名称</param>
+		/// <exception cref="ArgumentOutOfRangeException">参数: groupId 或 qqId 超出范围</exception>
+		/// <exception cref="ArgumentNullException">参数: newName 为 null</exception>
+		/// <returns>修改成功返回 <code>true</code>, 失败返回 <code>false</code></returns>
+		public bool SetGroupMemberVisitingCard (long groupId, long qqId, string newName)
+		{
+			if (groupId < Group.MinValue)
+			{
+				throw new ArgumentOutOfRangeException ("groupId");
+			}
+
+			if (qqId < QQ.MinValue)
+			{
+				throw new ArgumentOutOfRangeException ("qqId");
+			}
+
+			if (newName == null)
+			{
+				throw new ArgumentNullException ("newName");
+			}
+
+			GCHandle newNameHandle = newName.GetStringGCHandle (CQApi.DefaultEncoding);
+			try
+			{
+				return CQP.CQ_setGroupCard (this.AuthCode, groupId, qqId, newNameHandle.AddrOfPinnedObject ()) == 0;
+			}
+			finally
+			{
+				newNameHandle.Free ();
+			}
+		}
+
+		/// <summary>
+		/// 设置群成员名片
+		/// </summary>
+		/// <param name="group">目标群</param>
+		/// <param name="qq">目标QQ</param>
+		/// <param name="newName">新名称</param>
+		/// <exception cref="ArgumentNullException">参数: group、qq 或 newName 为 null</exception>
+		/// <returns>修改成功返回 <code>true</code>, 失败返回 <code>false</code></returns>
+		public bool SetGroupMemberVisitingCard (Group group, QQ qq, string newName)
+		{
+			if (group == null)
+			{
+				throw new ArgumentNullException ("group");
+			}
+
+			if (qq == null)
+			{
+				throw new ArgumentNullException ("qq");
+			}
+
+			try
+			{
+				return this.SetGroupMemberVisitingCard (group.Id, qq.Id, newName);
+			}
+			catch (ArgumentNullException)
+			{
+				throw;
+			}
+		}
+
+		/// <summary>
+		/// 设置群成员专属头衔, 并指定其过期的时间
+		/// </summary>
+		/// <param name="groupId">目标群</param>
+		/// <param name="qqId">目标QQ</param>
+		/// <param name="newTitle">新头衔</param>
+		/// <param name="time">过期时间</param>
+		/// <exception cref="ArgumentOutOfRangeException">参数: groupId、qqId 或 time 超出范围</exception>
+		/// <exception cref="ArgumentNullException">参数: newTtitle 是 null</exception>
+		/// <returns>修改成功返回 <code>true</code>, 失败返回 <code>false</code></returns>
+		public bool SetGroupMemberExclusiveTitle (long groupId, long qqId, string newTitle, TimeSpan time)
+		{
+			if (groupId < Group.MinValue)
+			{
+				throw new ArgumentOutOfRangeException ("groupId");
+			}
+
+			if (qqId < QQ.MinValue)
+			{
+				throw new ArgumentOutOfRangeException ("qqId");
+			}
+
+			if (newTitle == null)
+			{
+				throw new ArgumentNullException ("newTitle");
+			}
+
+			if (time.TotalSeconds <= 0 || time.TotalSeconds > 2592000)  //要在 1秒 ~ 30天 的范围内
+			{
+				throw new ArgumentOutOfRangeException ("time");
+			}
+
+			GCHandle newTitleHandle = newTitle.GetStringGCHandle (CQApi.DefaultEncoding);
+			try
+			{
+				return CQP.CQ_setGroupSpecialTitle (this.AuthCode, groupId, qqId, newTitleHandle.AddrOfPinnedObject (), (long)time.TotalSeconds) == 0;
+			}
+			finally
+			{
+				newTitleHandle.Free ();
+			}
+		}
+
+		/// <summary>
+		/// 设置群成员专属头衔, 并指定其过期的时间
+		/// </summary>
+		/// <param name="group">目标群</param>
+		/// <param name="qq">目标QQ</param>
+		/// <param name="newTitle">新头衔</param>
+		/// <param name="time">过期时间 (范围: 1秒 ~ 30天)</param>
+		/// <exception cref="ArgumentNullException">参数: group、qq 或 newTitle 为 null</exception>
+		/// <exception cref="ArgumentOutOfRangeException">参数: time 超出范围</exception>
+		/// <returns>修改成功返回 <code>true</code>, 失败返回 <code>false</code></returns>
+		public bool SetGroupMemberExclusiveTitle (Group group, QQ qq, string newTitle, TimeSpan time)
+		{
+			if (group == null)
+			{
+				throw new ArgumentNullException ("group");
+			}
+
+			if (qq == null)
+			{
+				throw new ArgumentNullException ("qq");
+			}
+
+			try
+			{
+				return this.SetGroupMemberExclusiveTitle (group.Id, qq.Id, newTitle, time);
+			}
+			catch (ArgumentNullException)
+			{
+				throw;
+			}
+			catch (ArgumentOutOfRangeException)
+			{
+				throw;
+			}
+		}
+
+		/// <summary>
+		/// 设置群成员永久专属头衔
+		/// </summary>
+		/// <param name="groupId">目标群</param>
+		/// <param name="qqId">目标QQ</param>
+		/// <param name="newTitle">新头衔</param>
+		/// <exception cref="ArgumentOutOfRangeException">参数: groupId 或 qqId 超出范围</exception>
+		/// <exception cref="ArgumentNullException">参数: newTitle 是 null</exception>
+		/// <returns>修改成功返回 <code>true</code>, 失败返回 <code>false</code></returns>
+		public bool SetGroupMemberForeverExclusiveTitle (long groupId, long qqId, string newTitle)
+		{
+			if (groupId < Group.MinValue)
+			{
+				throw new ArgumentOutOfRangeException ("groupId");
+			}
+
+			if (qqId < QQ.MinValue)
+			{
+				throw new ArgumentOutOfRangeException ("qqId");
+			}
+
+			if (newTitle == null)
+			{
+				throw new ArgumentNullException ("newTitle");
+			}
+
+			GCHandle newTitleHandle = newTitle.GetStringGCHandle (CQApi.DefaultEncoding);
+			try
+			{
+				return CQP.CQ_setGroupSpecialTitle (this.AuthCode, groupId, qqId, newTitleHandle.AddrOfPinnedObject (), -1) == 0;
+			}
+			finally
+			{
+				newTitleHandle.Free ();
+			}
+		}
+
+		/// <summary>
+		/// 设置群成员永久专属头衔
+		/// </summary>
+		/// <param name="group">目标群</param>
+		/// <param name="qq">目标QQ</param>
+		/// <param name="newTitle">新头衔</param>
+		/// <exception cref="ArgumentNullException">参数: group、qq 或 newTitle 为 null</exception>
+		/// <returns>修改成功返回 <code>true</code>, 失败返回 <code>false</code></returns>
+		public bool SetGroupMemberForeverExclusiveTitle (Group group, QQ qq, string newTitle)
+		{
+			if (group == null)
+			{
+				throw new ArgumentNullException ("group");
+			}
+
+			if (qq == null)
+			{
+				throw new ArgumentNullException ("qq");
+			}
+
+			try
+			{
+				return this.SetGroupMemberForeverExclusiveTitle (group.Id, qq.Id, newTitle);
+			}
+			catch (ArgumentNullException)
+			{
+				throw;
+			}
+		}
+
+		/// <summary>
+		/// 设置群管理员
+		/// </summary>
+		/// <param name="groupId">目标群</param>
+		/// <param name="qqId">目标QQ</param>
+		/// <exception cref="ArgumentOutOfRangeException">参数: groupId 或 qqId 超出范围</exception>
+		/// <returns>修改成功返回 <code>true</code>, 失败返回 <code>false</code></returns>
+		public bool SetGroupManage (long groupId, long qqId)
+		{
+			if (groupId < Group.MinValue)
+			{
+				throw new ArgumentOutOfRangeException ("groupId");
+			}
+
+			if (qqId < QQ.MinValue)
+			{
+				throw new ArgumentOutOfRangeException ("qqId");
+			}
+
+			return CQP.CQ_setGroupAdmin (this.AuthCode, groupId, qqId, true) == 0;
+		}
+
+		/// <summary>
+		/// 设置群管理员
+		/// </summary>
+		/// <param name="group">目标群</param>
+		/// <param name="qq">目标QQ</param>
+		/// <exception cref="ArgumentNullException">参数: group 或 qq 为 null</exception>
+		/// <returns>修改成功返回 <code>true</code>, 失败返回 <code>false</code></returns>
+		public bool SetGroupManage (Group group, QQ qq)
+		{
+			if (group == null)
+			{
+				throw new ArgumentNullException ("group");
+			}
+
+			if (qq == null)
+			{
+				throw new ArgumentNullException ("qq");
+			}
+
+			return this.SetGroupManage (group.Id, qq.Id);
+		}
+
+		/// <summary>
+		/// 解除群管理员
+		/// </summary>
+		/// <param name="groupId">目标群</param>
+		/// <param name="qqId">目标QQ</param>
+		/// <exception cref="ArgumentOutOfRangeException">参数: groupId 或 qqId 超出范围</exception>
+		/// <returns>修改成功返回 <code>true</code>, 失败返回 <code>false</code></returns>
+		public bool RemoveGroupManage (long groupId, long qqId)
+		{
+			if (groupId < Group.MinValue)
+			{
+				throw new ArgumentOutOfRangeException ("groupId");
+			}
+
+			if (qqId < QQ.MinValue)
+			{
+				throw new ArgumentOutOfRangeException ("qqId");
+			}
+
+			return CQP.CQ_setGroupAdmin (this.AuthCode, groupId, qqId, false) == 0;
+		}
+
+		/// <summary>
+		/// 解除群管理员
+		/// </summary>
+		/// <param name="group">目标群</param>
+		/// <param name="qq">目标QQ</param>
+		/// <exception cref="ArgumentOutOfRangeException">参数: group 或 qq 为 null</exception>
+		/// <returns>修改成功返回 <code>true</code>, 失败返回 <code>false</code></returns>
+		public bool RemoveGroupManage (Group group, QQ qq)
+		{
+			if (group == null)
+			{
+				throw new ArgumentNullException ("group");
+			}
+
+			if (qq == null)
+			{
+				throw new ArgumentNullException ("qq");
+			}
+
+			return this.RemoveGroupManage (group.Id, qq.Id);
+		}
+
+		/// <summary>
+		/// 开启群匿名
+		/// </summary>
+		/// <param name="groupId">目标群</param>
+		/// <exception cref="ArgumentOutOfRangeException">参数: groupId 超出范围</exception>
+		/// <returns>修改成功返回 <code>true</code>, 失败返回 <code>false</code></returns>
+		public bool OpenGroupAnonymous (long groupId)
+		{
+			if (groupId < Group.MinValue)
+			{
+				throw new ArgumentOutOfRangeException ("groupId");
+			}
+			return CQP.CQ_setGroupAnonymous (this.AuthCode, groupId, true) == 0;
+		}
+
+		/// <summary>
+		/// 开启群匿名
+		/// </summary>
+		/// <param name="group">目标群</param>
+		/// <exception cref="ArgumentNullException">参数: group 为 null</exception>
+		/// <returns>修改成功返回 <code>true</code>, 失败返回 <code>false</code></returns>
+		public bool OpenGroupAnonymous (Group group)
+		{
+			if (group == null)
+			{
+				throw new ArgumentNullException ("group");
+			}
+
+			return this.OpenGroupAnonymous (group.Id);
+		}
+
+		/// <summary>
+		/// 关闭群匿名
+		/// </summary>
+		/// <param name="groupId">目标群</param>
+		/// <exception cref="ArgumentOutOfRangeException">参数: groupId 超出范围</exception>
+		/// <returns>修改成功返回 <code>true</code>, 失败返回 <code>false</code></returns>
+		public bool StopGroupAnonymous (long groupId)
+		{
+			if (groupId < Group.MinValue)
+			{
+				throw new ArgumentOutOfRangeException ("groupId");
+			}
+			return CQP.CQ_setGroupAnonymous (this.AuthCode, groupId, false) == 0;
+		}
+
+		/// <summary>
+		/// 关闭群匿名
+		/// </summary>
+		/// <param name="group">目标群</param>
+		/// <exception cref="ArgumentNullException">参数: group 为 null</exception>
+		/// <returns>修改成功返回 <code>true</code>, 失败返回 <code>false</code></returns>
+		public bool StopGroupAnonymous (Group group)
+		{
+			if (group == null)
+			{
+				throw new ArgumentNullException ("group");
+			}
+
+			return this.StopGroupAnonymous (group.Id);
+		}
+
+		/// <summary>
+		/// 退出群. 慎用, 此接口需要严格授权
+		/// </summary>
+		/// <param name="groupId">目标群</param>
+		/// <exception cref="ArgumentOutOfRangeException">参数: groupId 超出范围</exception>
+		/// <returns>修改成功返回 <code>true</code>, 失败返回 <code>false</code></returns>
+		public bool ExitGroup (long groupId)
+		{
+			if (groupId < Group.MinValue)
+			{
+				throw new ArgumentOutOfRangeException ("groupId");
+			}
+			return CQP.CQ_setGroupLeave (this.AuthCode, groupId, false) == 0;
+		}
+
+		/// <summary>
+		/// 退出群. 慎用, 此接口需要严格授权
+		/// </summary>
+		/// <param name="group">目标群</param>
+		/// <exception cref="ArgumentNullException">参数: group 为 null</exception>
+		/// <returns>修改成功返回 <code>true</code>, 失败返回 <code>false</code></returns>
+		public bool ExitGroup (Group group)
+		{
+			if (group == null)
+			{
+				throw new ArgumentNullException ("group");
+			}
+
+			return this.ExitGroup (group.Id);
+		}
+
+		/// <summary>
+		/// 解散群. 慎用, 此接口需要严格授权
+		/// </summary>
+		/// <param name="groupId">目标群</param>
+		/// <exception cref="ArgumentOutOfRangeException">参数: groupId 超出范围</exception>
+		/// <returns>修改成功返回 <code>true</code>, 失败返回 <code>false</code></returns>
+		public bool DissolutionGroup (long groupId)
+		{
+			if (groupId < Group.MinValue)
+			{
+				throw new ArgumentOutOfRangeException ("groupId");
+			}
+
+			return CQP.CQ_setGroupLeave (this.AuthCode, groupId, true) == 0;
+		}
+
+		/// <summary>
+		/// 解散群. 慎用, 此接口需要严格授权
+		/// </summary>
+		/// <param name="group">目标群</param>
+		/// <exception cref="ArgumentNullException">参数: group 为 null</exception>
+		/// <returns>修改成功返回 <code>true</code>, 失败返回 <code>false</code></returns>
+		public bool DissolutionGroup (Group group)
+		{
+			if (group == null)
+			{
+				throw new ArgumentNullException ("group");
+			}
+
+			return this.DissolutionGroup (group.Id);
+		}
+
+		/// <summary>
+		/// 退出讨论组.
+		/// </summary>
+		/// <param name="discussId">目标讨论组</param>
+		/// <exception cref="ArgumentOutOfRangeException">参数: discussId 超出范围</exception>
+		/// <returns>修改成功返回 <code>true</code>, 失败返回 <code>false</code></returns>
+		public bool ExitDiscuss (long discussId)
+		{
+			if (discussId < Discuss.MinValue)
+			{
+				throw new ArgumentOutOfRangeException ("discussId");
+			}
+
+			return CQP.CQ_setDiscussLeave (this.AuthCode, discussId) == 0;
+		}
+
+		/// <summary>
+		/// 退出讨论组.
+		/// </summary>
+		/// <param name="discuss">目标讨论组</param>
+		/// <exception cref="ArgumentNullException">参数: discuss 为 null</exception>
+		/// <returns>修改成功返回 <code>true</code>, 失败返回 <code>false</code></returns>
+		public bool ExitDiscuss (Discuss discuss)
+		{
+			if (discuss == null)
+			{
+				throw new ArgumentNullException ("discuss");
+			}
+
+			return this.ExitDiscuss (discuss.Id);
+		}
+
+		/// <summary>
+		/// 移除群成员
+		/// </summary>
+		/// <param name="groupId">目标群</param>
+		/// <param name="qqId">目标QQ</param>
+		/// <param name="notRequest">不再接收加群申请. 请慎用, 默认: False</param>
+		/// <exception cref="ArgumentOutOfRangeException">参数: groupId 或 qqId 超出范围</exception>
+		/// <returns>修改成功返回 <code>true</code>, 失败返回 <code>false</code></returns>
+		public bool RemoveGroupMember (long groupId, long qqId, bool notRequest = false)
+		{
+			if (groupId < Group.MinValue)
+			{
+				throw new ArgumentOutOfRangeException ("groupId");
+			}
+
+			if (qqId < QQ.MinValue)
+			{
+				throw new ArgumentOutOfRangeException ("qqId");
+			}
+
+			return CQP.CQ_setGroupKick (this.AuthCode, groupId, qqId, notRequest) == 0;
+		}
+
+		/// <summary>
+		/// 移除群成员
+		/// </summary>
+		/// <param name="group">目标群</param>
+		/// <param name="qq">目标QQ</param>
+		/// <param name="notRequest">不再接收加群申请. 请慎用, 默认: False</param>
+		/// <exception cref="ArgumentNullException">参数: group 或 qq 为 null</exception>
+		/// <returns>修改成功返回 <code>true</code>, 失败返回 <code>false</code></returns>
+		public bool RemoveGroupMember (Group group, QQ qq, bool notRequest = false)
+		{
+			if (group == null)
+			{
+				throw new ArgumentNullException ("group");
+			}
+
+			if (qq == null)
+			{
+				throw new ArgumentNullException ("qq");
+			}
+
+			return this.RemoveGroupMember (group.Id, qq.Id, notRequest);
 		}
 		#endregion
 
-		#region --请求--
+		#region --请求类方法--
 		/// <summary>
 		/// 置好友添加请求
 		/// </summary>
 		/// <param name="tag">请求反馈标识</param>
 		/// <param name="response">反馈类型</param>
 		/// <param name="notes">备注</param>
-		/// <returns></returns>
-		public int SetFriendAddRequest (string tag, ResponseType response, string notes = null)
+		/// <returns>禁言成功返回 <code>true</code>, 否则返回 <code>false</code></returns>
+		public bool SetFriendAddRequest (string tag, CQResponseType response, string notes = null)
 		{
 			if (notes == null)
 			{
 				notes = string.Empty;
 			}
-			GCHandle handle = notes.GetStringGCHandle (_defaultEncoding);
-			int result = CQP.CQ_setFriendAddRequest (_authCode, tag, (int)response, handle.AddrOfPinnedObject ());
-			handle.Free ();
-			return result;
+			GCHandle notesHandle = notes.GetStringGCHandle (CQApi.DefaultEncoding);
+			GCHandle tagHandler = tag.GetStringGCHandle (CQApi.DefaultEncoding);
+			try
+			{
+				return CQP.CQ_setFriendAddRequest (this.AuthCode, tagHandler.AddrOfPinnedObject (), (int)response, notesHandle.AddrOfPinnedObject ()) == 0;
+			}
+			finally
+			{
+				notesHandle.Free ();
+				tagHandler.Free ();
+			}
 		}
 
 		/// <summary>
@@ -666,204 +2062,24 @@ namespace Native.Csharp.Sdk.Cqp
 		/// <param name="request">请求类型</param>
 		/// <param name="response">反馈类型</param>
 		/// <param name="appendMsg">备注</param>
-		/// <returns></returns>
-		public int SetGroupAddRequest (string tag, RequestType request, ResponseType response, string appendMsg)
+		/// <returns>禁言成功返回 <code>true</code>, 否则返回 <code>false</code></returns>
+		public bool SetGroupAddRequest (string tag, CQGroupAddRequestType request, CQResponseType response, string appendMsg = null)
 		{
 			if (appendMsg == null)
 			{
 				appendMsg = string.Empty;
 			}
-			GCHandle handle = appendMsg.GetStringGCHandle (_defaultEncoding);
-			int result = CQP.CQ_setGroupAddRequestV2 (_authCode, tag, (int)request, (int)response, handle.AddrOfPinnedObject ());
-			handle.Free ();
-			return result;
-		}
-		#endregion
-
-		#region --管理--
-		/// <summary>
-		/// 置匿名群员禁言
-		/// </summary>
-		/// <param name="groupId">目标群</param>
-		/// <param name="anonymous">匿名参数</param>
-		/// <param name="time">禁言时间, 单位: 秒, 不支持解禁</param>
-		/// <returns></returns>
-		public int SetGroupAnonymousBanSpeak (long groupId, string anonymous, TimeSpan time)
-		{
-			if (time.TotalSeconds <= 0)
+			GCHandle appendMsgHandle = appendMsg.GetStringGCHandle (CQApi.DefaultEncoding);
+			GCHandle tagHandle = tag.GetStringGCHandle (CQApi.DefaultEncoding);
+			try
 			{
-				time = TimeSpan.Zero;
+				return CQP.CQ_setGroupAddRequestV2 (this.AuthCode, tagHandle.AddrOfPinnedObject (), (int)request, (int)response, appendMsgHandle.AddrOfPinnedObject ()) == 0;
 			}
-			GCHandle handle = anonymous.GetStringGCHandle (_defaultEncoding);
-			int result = CQP.CQ_setGroupAnonymousBan (_authCode, groupId, handle.AddrOfPinnedObject (), (long)time.TotalSeconds);
-			handle.Free ();
-			return result;
-		}
-
-		/// <summary>
-		/// 置群员禁言
-		/// </summary>
-		/// <param name="groupId">目标群</param>
-		/// <param name="qqId">目标QQ</param>
-		/// <param name="time">禁言的时间，单位为秒。如果要解禁，请给TimeSpan.Zero</param>
-		/// <returns></returns>
-		public int SetGroupBanSpeak (long groupId, long qqId, TimeSpan time)
-		{
-			if (time.Ticks < 0)
+			finally
 			{
-				time = TimeSpan.Zero;
+				appendMsgHandle.Free ();
+				tagHandle.Free ();
 			}
-			return CQP.CQ_setGroupBan (_authCode, groupId, qqId, (long)time.TotalSeconds);
-		}
-
-		/// <summary>
-		/// 置全群禁言
-		/// </summary>
-		/// <param name="groupId">目标群</param>
-		/// <param name="isOpen">是否开启</param>
-		/// <returns></returns>
-		public int SetGroupWholeBanSpeak (long groupId, bool isOpen)
-		{
-			return CQP.CQ_setGroupWholeBan (_authCode, groupId, isOpen);
-		}
-
-		/// <summary>
-		/// 置群成员名片
-		/// </summary>
-		/// <param name="groupId">目标群</param>
-		/// <param name="qqId">目标QQ</param>
-		/// <param name="newNick">新昵称</param>
-		/// <returns></returns>
-		public int SetGroupMemberNewCard (long groupId, long qqId, string newNick)
-		{
-			GCHandle handle = newNick.GetStringGCHandle (_defaultEncoding);
-			int result = CQP.CQ_setGroupCard (_authCode, groupId, qqId, handle.AddrOfPinnedObject ());
-			handle.Free ();
-			return result;
-		}
-
-		/// <summary>
-		/// 置群成员专属头衔
-		/// </summary>
-		/// <param name="groupId">目标群</param>
-		/// <param name="qqId">目标QQ</param>
-		/// <param name="specialTitle">如果要删除，这里填空</param>
-		/// <param name="time">专属头衔有效期，单位为秒。如果永久有效，time填写负数</param>
-		/// <returns></returns>
-		public int SetGroupSpecialTitle (long groupId, long qqId, string specialTitle, TimeSpan time)
-		{
-			if (time.Ticks < 0)
-			{
-				time = new TimeSpan (-10000000);     //-1秒
-			}
-			GCHandle handle = specialTitle.GetStringGCHandle (_defaultEncoding);
-			int result = CQP.CQ_setGroupSpecialTitle (_authCode, groupId, qqId, handle.AddrOfPinnedObject (), (long)time.TotalSeconds);
-			handle.Free ();
-			return result;
-		}
-
-		/// <summary>
-		/// 置群管理员
-		/// </summary>
-		/// <param name="groupId">目标群</param>
-		/// <param name="qqId">目标QQ</param>
-		/// <param name="isCalcel">True: 设置管理员, False: 取消管理员</param>
-		/// <returns></returns>
-		public int SetGroupManager (long groupId, long qqId, bool isCalcel)
-		{
-			return CQP.CQ_setGroupAdmin (_authCode, groupId, qqId, isCalcel);
-		}
-
-		/// <summary>
-		/// 置群匿名设置
-		/// </summary>
-		/// <param name="groupId">目标群</param>
-		/// <param name="isOpen">是否打开</param>
-		/// <returns></returns>
-		public int SetAnonymousStatus (long groupId, bool isOpen)
-		{
-			return CQP.CQ_setGroupAnonymous (_authCode, groupId, isOpen);
-		}
-
-		/// <summary>
-		/// 置群退出 慎用,此接口需要严格授权
-		/// </summary>
-		/// <param name="groupId">目标群</param>
-		/// <param name="dissolve">默认为False, True: 解散本群(群主) False: 退出本群(管理、群成员)</param>
-		/// <returns></returns>
-		public int SetGroupExit (long groupId, bool dissolve = false)
-		{
-			return CQP.CQ_setGroupLeave (_authCode, groupId, dissolve);
-		}
-
-		/// <summary>
-		/// 置群员移除
-		/// </summary>
-		/// <param name="groupId">目标群</param>
-		/// <param name="qqId">目标QQ</param>
-		/// <param name="notAccept">如果为True，则“不再接收此人加群申请”，请慎用。留空为False</param>
-		/// <returns></returns>
-		public int SetGroupMemberRemove (long groupId, long qqId, bool notAccept = false)
-		{
-			return CQP.CQ_setGroupKick (_authCode, groupId, qqId, notAccept);
-		}
-
-		/// <summary>
-		/// 置讨论组退出
-		/// </summary>
-		/// <param name="discussId">目标讨论组</param>
-		/// <returns></returns>
-		public int SetDiscussExit (long discussId)
-		{
-			return CQP.CQ_setDiscussLeave (_authCode, discussId);
-		}
-		#endregion
-
-		#region --其它--
-		/// <summary>
-		/// 获取匿名信息
-		/// </summary>
-		/// <param name="source">匿名参数</param>
-		/// <returns></returns>
-		public GroupAnonymous GetAnonymous (string source)
-		{
-			BinaryReader binary = new BinaryReader (new MemoryStream (Convert.FromBase64String (source)));
-			GroupAnonymous anonymous = new GroupAnonymous ();
-			anonymous.Id = binary.ReadInt64_Ex ();
-			anonymous.CodeName = binary.ReadString_Ex ();
-			anonymous.Token = binary.ReadToken_Ex ();
-			return anonymous;
-		}
-
-		/// <summary>
-		/// 获取群文件
-		/// </summary>
-		/// <param name="source">群文件参数</param>
-		/// <returns></returns>
-		public GroupFile GetFile (string source)
-		{
-			BinaryReader binary = new BinaryReader (new MemoryStream (Convert.FromBase64String (source)));
-			GroupFile file = new GroupFile ();
-			file.Id = binary.ReadString_Ex (_defaultEncoding);      // 参照官方SDK, 编码为 ASCII
-			file.Name = binary.ReadString_Ex (_defaultEncoding);    // 参照官方SDK, 编码为 ASCII
-			file.Size = binary.ReadInt64_Ex ();
-			file.Busid = Convert.ToInt32 (binary.ReadInt64_Ex ());
-			return file;
-		}
-
-		/// <summary>
-		/// 编码悬浮窗数据置文本
-		/// </summary>
-		/// <param name="floatWindow"></param>
-		/// <returns></returns>
-		public string FormatStringFloatWindow (FloatWindow floatWindow)
-		{
-			BinaryWriter binary = new BinaryWriter (new MemoryStream ());
-			binary.Write_Ex (floatWindow.Data);
-			binary.Write_Ex (floatWindow.Unit);
-			binary.Write_Ex ((int)floatWindow.Color);
-
-			return Convert.ToBase64String (binary.ToArray ());
 		}
 		#endregion
 	}

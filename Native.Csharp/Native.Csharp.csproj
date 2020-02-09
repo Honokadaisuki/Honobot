@@ -8,7 +8,7 @@
     <OutputType>Library</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>Native.Csharp</RootNamespace>
-    <AssemblyName>xyz.hbyzhonoka.acm</AssemblyName>
+    <AssemblyName>xyz.hbyzhonoka.honobot</AssemblyName>
     <TargetFrameworkVersion>v4.5</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <Deterministic>true</Deterministic>
@@ -18,7 +18,7 @@
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x86'">
     <DebugSymbols>true</DebugSymbols>
-    <OutputPath>bin\x86\Debug\</OutputPath>
+    <OutputPath>..\..\CQA-xiaoi\酷Q Air\dev\</OutputPath>
     <DefineConstants>DEBUG;TRACE</DefineConstants>
     <DebugType>full</DebugType>
     <ErrorReport>prompt</ErrorReport>
@@ -61,13 +61,9 @@
       <Private>False</Private>
       <SpecificVersion>False</SpecificVersion>
     </Reference>
-    <Reference Include="Newtonsoft.Json, Version=12.0.0.0, Culture=neutral, PublicKeyToken=30ad4fe6b2a6aeed, processorArchitecture=MSIL">
-      <HintPath>..\packages\Newtonsoft.Json.12.0.2\lib\net45\Newtonsoft.Json.dll</HintPath>
-    </Reference>
     <Reference Include="System" />
     <Reference Include="System.ComponentModel.Composition" />
     <Reference Include="System.Core" />
-    <Reference Include="System.Drawing" />
     <Reference Include="System.IO.Compression" />
     <Reference Include="System.Net.Http" />
     <Reference Include="System.Numerics" />
@@ -77,9 +73,6 @@
     <Reference Include="Microsoft.CSharp" />
     <Reference Include="System.Data" />
     <Reference Include="System.Xml" />
-    <Reference Include="Tesseract, Version=3.3.0.0, Culture=neutral, processorArchitecture=MSIL">
-      <HintPath>..\packages\Tesseract.3.3.0\lib\net45\Tesseract.dll</HintPath>
-    </Reference>
     <Reference Include="Unity.Abstractions, Version=3.3.0.0, Culture=neutral, PublicKeyToken=6d32ff45e0ccc69f, processorArchitecture=MSIL">
       <HintPath>..\packages\Unity.5.8.6\lib\net45\Unity.Abstractions.dll</HintPath>
     </Reference>
@@ -103,28 +96,18 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="App\Common.cs" />
-    <Compile Include="App\Core\LibExport.cs">
-      <AutoGen>True</AutoGen>
-      <DesignTime>True</DesignTime>
-      <DependentUpon>LibExport.tt</DependentUpon>
+    <Compile Include="App\Common\AppInfo.cs" />
+    <Compile Include="App\Common\AppData.cs" />
+    <Compile Include="App\Export\CQEventExport.cs">
+      <DependentUpon>CQExport.tt</DependentUpon>
     </Compile>
-    <Compile Include="App\Core\MenuExport.cs">
-      <AutoGen>True</AutoGen>
-      <DesignTime>True</DesignTime>
-      <DependentUpon>MenuExport.tt</DependentUpon>
+    <Compile Include="App\Export\CQMenuExport.cs">
+      <DependentUpon>CQExport.tt</DependentUpon>
     </Compile>
-    <Compile Include="App\Core\StatusExport.cs">
-      <AutoGen>True</AutoGen>
-      <DesignTime>True</DesignTime>
-      <DependentUpon>StatusExport.tt</DependentUpon>
+    <Compile Include="App\Export\CQStatusExport.cs">
+      <DependentUpon>CQExport.tt</DependentUpon>
     </Compile>
-    <Compile Include="App\Event\Event_CqAppDisable.cs" />
-    <Compile Include="App\Event\Event_CqAppEnable.cs" />
-    <Compile Include="App\Event\Event_AppMain.cs" />
-    <Compile Include="App\Event\Event_CqExit.cs" />
-    <Compile Include="App\Event\Event_CqStartup.cs" />
-    <Compile Include="App\Event\Event_GroupMessage.cs" />
+    <Compile Include="App\CQMain.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Repair\Core\Kernel32.cs" />
     <Compile Include="Repair\Enum\LoadLibraryFlags.cs" />
@@ -133,36 +116,36 @@
     <Compile Include="Repair\ModuleInitializer.cs" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="xyz.hbyzhonoka.acm.json">
+    <None Include="App\Export\CQExport.log">
+      <AutoGen>True</AutoGen>
+      <DesignTime>True</DesignTime>
+      <DependentUpon>CQExport.tt</DependentUpon>
+    </None>
+    <None Include="xyz.hbyzhonoka.honobot.json">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
     <None Include="packages.config" />
+  </ItemGroup>
+  <ItemGroup>
+    <Service Include="{508349B6-6B84-4DF5-91F0-309BEEBAD82D}" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="App\Export\CQExport.tt">
+      <Generator>TextTemplatingFileGenerator</Generator>
+      <LastGenOutput>CQExport.log</LastGenOutput>
+    </Content>
+    <None Include="FodyWeavers.xml" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Native.Csharp.Sdk\Native.Csharp.Sdk.csproj">
       <Project>{797eaebc-4d5b-4eef-87f4-a508fda2cb6a}</Project>
       <Name>Native.Csharp.Sdk</Name>
     </ProjectReference>
+    <ProjectReference Include="..\xyz.hbyzhonoka.honobot.Code\xyz.hbyzhonoka.honobot.Code.csproj">
+      <Project>{741b5747-9954-40aa-9fbe-14f46b3c3875}</Project>
+      <Name>xyz.hbyzhonoka.honobot.Code</Name>
+    </ProjectReference>
   </ItemGroup>
-  <ItemGroup>
-    <Service Include="{508349B6-6B84-4DF5-91F0-309BEEBAD82D}" />
-  </ItemGroup>
-  <ItemGroup>
-    <Content Include="App\Core\StatusExport.tt">
-      <Generator>TextTemplatingFileGenerator</Generator>
-      <LastGenOutput>StatusExport.cs</LastGenOutput>
-    </Content>
-    <Content Include="App\Core\LibExport.tt">
-      <Generator>TextTemplatingFileGenerator</Generator>
-      <LastGenOutput>LibExport.cs</LastGenOutput>
-    </Content>
-    <Content Include="App\Core\MenuExport.tt">
-      <Generator>TextTemplatingFileGenerator</Generator>
-      <LastGenOutput>MenuExport.cs</LastGenOutput>
-    </Content>
-    <None Include="FodyWeavers.xml" />
-  </ItemGroup>
-  <ItemGroup />
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <ImportGroup Label=".NET DllExport" />
   <ImportGroup Label=".NET DllExport" />
@@ -170,7 +153,6 @@
     <Import Project="$(SolutionDir)packages\DllExport.1.6.1\tools\net.r_eg.DllExport.targets" Condition="Exists('$(SolutionDir)packages\DllExport.1.6.1\tools\net.r_eg.DllExport.targets')" Label="8337224c9ad9e356" />
     <Import Project="..\packages\Fody.2.2.1.0\build\portable-net+sl+win+wpa+wp\Fody.targets" Condition="Exists('..\packages\Fody.2.2.1.0\build\portable-net+sl+win+wpa+wp\Fody.targets')" />
     <Import Project="..\packages\Costura.Fody.1.6.2\build\dotnet\Costura.Fody.targets" Condition="Exists('..\packages\Costura.Fody.1.6.2\build\dotnet\Costura.Fody.targets')" />
-    <Import Project="..\packages\Tesseract.3.3.0\build\Tesseract.targets" Condition="Exists('..\packages\Tesseract.3.3.0\build\Tesseract.targets')" />
   </ImportGroup>
   <Target Name="DllExportRestorePkg" BeforeTargets="PrepareForBuild">
     <Warning Condition="!Exists('$(SolutionDir)DllExport.bat')" Text="We can't find 'DllExport.bat' in '$(SolutionDir)' - https://github.com/3F/DllExport" />
@@ -200,6 +182,5 @@ rename "$(TargetDir)$(TargetName)\$(TargetName).json" "app.json"
     </PropertyGroup>
     <Error Condition="!Exists('..\packages\Fody.2.2.1.0\build\portable-net+sl+win+wpa+wp\Fody.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\Fody.2.2.1.0\build\portable-net+sl+win+wpa+wp\Fody.targets'))" />
     <Error Condition="!Exists('..\packages\Costura.Fody.1.6.2\build\dotnet\Costura.Fody.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\Costura.Fody.1.6.2\build\dotnet\Costura.Fody.targets'))" />
-    <Error Condition="!Exists('..\packages\Tesseract.3.3.0\build\Tesseract.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\Tesseract.3.3.0\build\Tesseract.targets'))" />
   </Target>
 </Project>
