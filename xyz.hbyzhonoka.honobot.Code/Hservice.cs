@@ -7,8 +7,7 @@ using System.Threading.Tasks;
 
 namespace xyz.hbyzhonoka.honobot.Code
 {
-    public interface Hservice
+    public interface Hservice : HHolder
     {
-        void RecMsg(CQGroupMessageEventArgs e);
     }
 }

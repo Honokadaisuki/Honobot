@@ -9,7 +9,7 @@ namespace xyz.hbyzhonoka.honobot.Code
 {
     class FD : Hservice
     {
-        List<string> la = new List<string>();
+        public List<string> la = new List<string>();
         public void RecMsg(CQGroupMessageEventArgs e)
         {
             string t = e.Message.Text.Replace(" ", "");
@@ -20,10 +20,11 @@ namespace xyz.hbyzhonoka.honobot.Code
             }
             for (int i = la.Count - 1; 2 * i - la.Count >= 0; i--)
             {
+                int tip1 = 2 * i - la.Count();
                 bool ok = true;
-                for (int j = i; j < la.Count; j++)
+                for (int j = 0; j <= la.Count()-1-i; j++)
                 {
-                    if (la[i + j - la.Count()] != la[j])
+                    if (la[tip1 + j] != la[i + j])
                     {
                         ok = false;
                         break;
@@ -31,15 +32,16 @@ namespace xyz.hbyzhonoka.honobot.Code
                 }
                 if (ok)
                 {
-                    if (!la[la.Count - 1].Contains("复读警察出警"))
+                    if (la[la.Count - 1] != "[CQ: emoji, id = 128110]复[CQ: emoji, id = 128110]读[CQ: emoji, id = 128110]警[CQ: emoji, id = 128110]察[CQ: emoji, id = 128110]出[CQ: emoji, id = 128110]警[CQ: emoji, id = 128110]".Replace(" ", ""))
                     {
-                        e.CQApi.SendGroupMessage(e.FromGroup, "复读警察出警👮");
+                        e.CQApi.SendGroupMessage(e.FromGroup, "👮复👮读👮警👮察👮出👮警👮");
+                        la.Add("[CQ: emoji, id = 128110]复[CQ: emoji, id = 128110]读[CQ: emoji, id = 128110]警[CQ: emoji, id = 128110]察[CQ: emoji, id = 128110]出[CQ: emoji, id = 128110]警[CQ: emoji, id = 128110]".Replace(" ", ""));
                     }
                     else
                     {
                         e.CQApi.SendGroupMessage(e.FromGroup, "复读你🐎呢?");
+                        la.Add("复读你[CQ: emoji, id = 128014]呢 ? ".Replace(" ", ""));
                     }
-                    la.Clear();
                     break;
                 }
             }
