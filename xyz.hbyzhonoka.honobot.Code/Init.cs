@@ -30,6 +30,7 @@ namespace xyz.hbyzhonoka.honobot.Code
             HServicesHolder.l.Add(new zztmn());
             HServicesHolder.l.Add(new KWR());
             HServicesHolder.l.Add(new YQT());
+            HServicesHolder.l.Add(new ycm());
             ReadData();
         }
 
