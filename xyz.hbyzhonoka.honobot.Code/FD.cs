@@ -32,7 +32,7 @@ namespace xyz.hbyzhonoka.honobot.Code
                 }
                 if (ok)
                 {
-                    if (la[la.Count - 1] != "[CQ: emoji, id = 128110]复[CQ: emoji, id = 128110]读[CQ: emoji, id = 128110]警[CQ: emoji, id = 128110]察[CQ: emoji, id = 128110]出[CQ: emoji, id = 128110]警[CQ: emoji, id = 128110]".Replace(" ", ""))
+                    /*if (la[la.Count - 1] != "[CQ: emoji, id = 128110]复[CQ: emoji, id = 128110]读[CQ: emoji, id = 128110]警[CQ: emoji, id = 128110]察[CQ: emoji, id = 128110]出[CQ: emoji, id = 128110]警[CQ: emoji, id = 128110]".Replace(" ", ""))
                     {
                         e.CQApi.SendGroupMessage(e.FromGroup, "👮复👮读👮警👮察👮出👮警👮");
                         la.Add("[CQ: emoji, id = 128110]复[CQ: emoji, id = 128110]读[CQ: emoji, id = 128110]警[CQ: emoji, id = 128110]察[CQ: emoji, id = 128110]出[CQ: emoji, id = 128110]警[CQ: emoji, id = 128110]".Replace(" ", ""));
@@ -42,7 +42,11 @@ namespace xyz.hbyzhonoka.honobot.Code
                         e.CQApi.SendGroupMessage(e.FromGroup, "复读你🐎呢?");
                         la.Add("复读你[CQ: emoji, id = 128014]呢 ? ".Replace(" ", ""));
                     }
-                    break;
+                    break;*/
+                    for (int j = 0; j <= la.Count() - 1 - i; j++)
+                    {
+                        e.CQApi.SendGroupMessage(e.FromGroup, la[tip1 + j]);
+                    }
                 }
             }
         }
