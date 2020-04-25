@@ -47,6 +47,8 @@ namespace xyz.hbyzhonoka.honobot.Code
                     {
                         e.CQApi.SendGroupMessage(e.FromGroup, la[tip1 + j]);
                     }
+                    la.Clear();
+                    break;
                 }
             }
         }
