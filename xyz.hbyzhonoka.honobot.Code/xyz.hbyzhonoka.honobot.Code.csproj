@@ -53,8 +53,10 @@
     <Compile Include="HServicesHolder.cs" />
     <Compile Include="Event_GroupMessage.cs" />
     <Compile Include="Cmdable.cs" />
+    <Compile Include="inf.cs" />
     <Compile Include="Init.cs" />
     <Compile Include="KWR.cs" />
+    <Compile Include="Mess.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="ycm.cs" />
     <Compile Include="YQT.cs" />

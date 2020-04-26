@@ -47,12 +47,12 @@ namespace xyz.hbyzhonoka.honobot.Code
                 if(f * tt == -1)
                 {
                     e.CQApi.SendGroupMessage(e.FromGroup, "fnmdp");
-                    FDHolder.d[e.FromGroup.Id].la.Add("fnmdp");
+                    FDHolder.d[e.FromGroup.Id].la.Add(new Mess("fnmdp", inf.hostqq));
                 }
                 else
                 {
                     e.CQApi.SendGroupMessage(e.FromGroup, "果果真可爱");
-                    FDHolder.d[e.FromGroup.Id].la.Add("果果真可爱");
+                    FDHolder.d[e.FromGroup.Id].la.Add(new Mess("果果真可爱",inf.hostqq));
                 }
             }
             
@@ -63,7 +63,7 @@ namespace xyz.hbyzhonoka.honobot.Code
                 {
                     if (i == 0 && e.FromGroup == 812596623) continue;
                     e.CQApi.SendGroupMessage(e.FromGroup, (string)re[i]);
-                    FDHolder.d[e.FromGroup.Id].la.Add((string)re[i]);
+                    FDHolder.d[e.FromGroup.Id].la.Add(new Mess((string)re[i],inf.hostqq));
                     break;
                 }
             }
